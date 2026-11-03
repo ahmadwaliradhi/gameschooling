@@ -123,6 +123,25 @@ describe("Proof check", () => {
     expect(q!.verdict!.judges[1]!.textOnly).toBe(true);
   });
 
+  it("does not hide a bad Baseten key behind the text-only fallback", async () => {
+    const db = await testDb();
+    const { familyId, childId } = await familyWithChild(db);
+    const questId = await questFor(db, familyId, childId);
+    const client = fakeClient({
+      segment: async () => ({ raw: samLeaves }),
+      chat: async ({ provider }) => {
+        if (provider === "meta") return json(verdict("pass", 0.9));
+        throw new ModelError("401 invalid api key", 401);
+      },
+    });
+
+    const result = await checkProof(deps(db, client), { familyId, questId, proof: photo });
+
+    expect(result.outcome).toBe("needs_parent");
+    const log = await modelLog(db, familyId, { verdictId: result.verdictId });
+    expect(log.filter((c) => c.agent === "second_judge").map((c) => c.status)).toEqual(["error"]);
+  });
+
   it("feeds the diarized transcript to both judges and keeps no audio", async () => {
     const db = await testDb();
     const { familyId, childId } = await familyWithChild(db);
