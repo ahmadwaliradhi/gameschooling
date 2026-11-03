@@ -33,9 +33,10 @@ jobs:
       - run: pnpm check
       - run: pnpm build
 
-  # Upload a preview version (not live) and post its URL. Preview versions share
-  # production bindings (D1, R2), so they read and write real data. Needs the
-  # Worker to exist (first main deploy), so failures here don't block the PR.
+  # Deploy the PR to the separate gameschooling-preview Worker (wrangler env
+  # "preview") and post its URL. Uploading versions to the production Worker
+  # instead would block `wrangler secret put` there. One preview Worker is shared
+  # by all PRs (last push wins), and it uses production D1/R2 data.
   preview:
     needs: check
     continue-on-error: true
@@ -44,6 +45,11 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+    concurrency:
+      group: preview
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_ENV: preview
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -55,12 +61,12 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - name: Upload preview version
+      - name: Deploy preview Worker
         id: upload
         run: |
-          pnpm exec wrangler versions upload --preview-alias "pr-${{ github.event.pull_request.number }}" \
+          pnpm exec wrangler deploy \
             --message "PR #${{ github.event.pull_request.number }} @ ${GITHUB_SHA::7}" | tee upload.log
-          url=$(grep -oE 'https://pr-[^ ]+\.workers\.dev' upload.log | head -1)
+          url=$(grep -oE 'https://gameschooling-preview\.[^ ]+\.workers\.dev' upload.log | head -1)
           echo "url=$url" >> "$GITHUB_OUTPUT"
       - name: Comment preview URL
         if: steps.upload.outputs.url != ''
