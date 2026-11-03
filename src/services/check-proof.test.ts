@@ -96,6 +96,30 @@ describe("Proof check", () => {
     expect((await childView(db, familyId, childId)).quests.map((q) => q.state)).toEqual(["try_again"]);
   });
 
+  it("tells both judges what the Quest looks for, even when SAM fails", async () => {
+    const db = await testDb();
+    const { familyId, childId } = await familyWithChild(db);
+    const questId = await questFor(db, familyId, childId, {
+      readAloud: "Show me what you found in the garden!",
+      lookFor: [{ phrase: "red leaf", count: 2 }],
+    });
+    const prompts: Record<string, string> = {};
+    const client = fakeClient({
+      segment: async () => {
+        throw new ModelError("503 unavailable", 503);
+      },
+      chat: async ({ provider, messages }) => {
+        prompts[provider] = text(messages);
+        return json(verdict("pass", 0.9));
+      },
+    });
+
+    await checkProof(deps(db, client), { familyId, questId, proof: photo });
+
+    expect(prompts.meta).toContain("2 × red leaf");
+    expect(prompts.baseten).toContain("2 × red leaf");
+  });
+
   it("lets the second judge work from text when Baseten rejects the photo, and says so", async () => {
     const db = await testDb();
     const { familyId, childId } = await familyWithChild(db);

@@ -41,7 +41,10 @@ export function findingsText(findings: SamFinding[]): string {
 }
 
 export function judgeMessages(input: JudgeInput, opts: { photoDescription?: string } = {}): Message[] {
-  const quest = `Child's age: ${input.age}\nQuest: ${input.readAloud}\nExpected answer or rubric: ${input.answer}`;
+  const lookFor = input.lookFor.map((l) => `${l.count} × ${l.phrase}`).join(", ");
+  const quest = `Child's age: ${input.age}\nQuest: ${input.readAloud}\nExpected answer or rubric: ${input.answer}${
+    lookFor ? `\nThe photo should show: ${lookFor}` : ""
+  }`;
   const e = input.evidence;
   let parts: Part[];
   if (e.kind === "photo") {

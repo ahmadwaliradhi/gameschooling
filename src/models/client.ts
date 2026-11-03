@@ -18,7 +18,7 @@ export interface ModelClient {
     effort?: Effort;
     schema?: JsonSchema;
   }): Promise<TextResult>;
-  // Chat Completions on Meta or Baseten.
+  // Chat Completions on Meta or Baseten, streamed too.
   chat(req: {
     provider: "meta" | "baseten";
     model: string;
@@ -86,18 +86,43 @@ function partsText(parts: Part[]) {
   return parts.map((p) => (p.type === "text" ? p.text : "")).join("\n");
 }
 
+// A provider error as the Parent sees it in the model log: the status and the provider's own short
+// reason when it gives one as JSON. Raw bodies (HTML pages, stack traces) never reach the message.
+function providerError(status: number, body: unknown): ModelError {
+  const b = body as { error?: { message?: unknown; code?: unknown } | string; message?: unknown } | null;
+  const err = typeof b?.error === "object" ? b.error : undefined;
+  const reason = [
+    err?.message,
+    err?.code,
+    typeof b?.error === "string" ? b.error : undefined,
+    b?.message,
+  ].find((r): r is string => typeof r === "string" && r.trim() !== "");
+  const short = reason ? reason.split("\n")[0]!.slice(0, 200) : "provider error";
+  return new ModelError(`${status} ${short}`, status);
+}
+
+function parseJsonOrNull(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 async function wrap<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (e) {
     if (e instanceof ModelError) throw e;
-    if (e instanceof OpenAI.APIError) throw new ModelError(e.message, e.status ?? null);
+    if (e instanceof OpenAI.APIError && e.status !== undefined) {
+      throw providerError(e.status, e.error === undefined ? null : { error: e.error });
+    }
     throw new ModelError(e instanceof Error ? e.message : String(e), null);
   }
 }
 
 async function failOnBadStatus(res: Response) {
-  if (!res.ok) throw new ModelError(`${res.status} ${(await res.text()).slice(0, 500)}`, res.status);
+  if (!res.ok) throw providerError(res.status, parseJsonOrNull(await res.text()));
 }
 
 export function httpModelClient(keys: Keys): ModelClient {
@@ -151,9 +176,12 @@ export function httpModelClient(keys: Keys): ModelClient {
     chat: (req) =>
       wrap(async () => {
         const client = req.provider === "meta" ? meta() : baseten();
-        const res = await client.chat.completions.create({
+        // Streamed, like `respond`, so reasoning with an image never hits a gateway timeout.
+        const stream = await client.chat.completions.create({
           model: req.model,
           messages: toChatMessages(req.messages),
+          stream: true,
+          stream_options: { include_usage: true },
           ...(req.effort ? { reasoning_effort: req.effort } : {}),
           ...(req.schema
             ? {
@@ -164,14 +192,17 @@ export function httpModelClient(keys: Keys): ModelClient {
               }
             : {}),
         });
-        return {
-          text: res.choices[0]?.message.content ?? "",
-          usage: {
-            inputTokens: res.usage?.prompt_tokens ?? 0,
-            outputTokens: res.usage?.completion_tokens ?? 0,
-          },
-          model: res.model,
-        };
+        let text = "";
+        let usage: Usage = { inputTokens: 0, outputTokens: 0 };
+        let model = req.model;
+        for await (const chunk of stream) {
+          text += chunk.choices[0]?.delta.content ?? "";
+          if (chunk.model) model = chunk.model;
+          if (chunk.usage) {
+            usage = { inputTokens: chunk.usage.prompt_tokens, outputTokens: chunk.usage.completion_tokens };
+          }
+        }
+        return { text, usage, model };
       }),
 
     image: (req) =>
