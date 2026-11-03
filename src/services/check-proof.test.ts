@@ -209,6 +209,21 @@ describe("Proof check", () => {
     expect(result.outcome).toBe("accepted");
   });
 
+  it("does not pay Points when a judge answers confidence off the 0–1 scale", async () => {
+    const db = await testDb();
+    const { familyId, childId } = await familyWithChild(db);
+    const questId = await questFor(db, familyId, childId, { proofKind: "text", lookFor: [] });
+    const client = fakeClient(judges(verdict("pass", 85), verdict("pass", 0.9)));
+
+    const result = await checkProof(deps(db, client), {
+      familyId,
+      questId,
+      proof: { kind: "text", text: "..." },
+    });
+
+    expect(result.outcome).toBe("needs_parent");
+  });
+
   it("sends disagreement to the Parent, who accepts with one tap", async () => {
     const db = await testDb();
     const { familyId, childId, parentId } = await familyWithChild(db);

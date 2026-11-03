@@ -8,7 +8,8 @@ import { parsed, recorded, type CallContext } from "./log";
 
 export const JudgeOutput = z.strictObject({
   decision: z.enum(["pass", "fail"]),
-  confidence: z.number(),
+  // Out of range fails parsing, so the judge counts as failed and the Parent decides.
+  confidence: z.number().min(0).max(1),
   reason: z.string(),
   // What the judge saw in the photo, in one or two sentences; "" for other Proofs.
   description: z.string(),
