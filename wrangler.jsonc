@@ -21,6 +21,26 @@
     "PLANNER_MODEL": "muse-wonder-1.0",
     "PLANNER_FALLBACK_MODEL": "muse-spark-1.3",
   },
+  "env": {
+    // PR previews deploy to their own Worker (gameschooling-preview) so they
+    // never add versions to production. Shares production D1/R2; no cron.
+    "preview": {
+      "triggers": { "crons": [] },
+      "vars": {
+        "PLANNER_MODEL": "muse-wonder-1.0",
+        "PLANNER_FALLBACK_MODEL": "muse-spark-1.3",
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "gameschooling",
+          "database_id": "0d1c7200-5db1-4b80-acee-f249b8e33c83",
+          "migrations_dir": "migrations",
+        },
+      ],
+      "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "gameschooling" }],
+    },
+  },
   // Secrets (wrangler secret put / .dev.vars): MODEL_API_KEY, BASETEN_API_KEY,
   // GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, BETTER_AUTH_SECRET, BETTER_AUTH_URL
 }
