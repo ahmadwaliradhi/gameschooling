@@ -1,8 +1,7 @@
 import { ModelError } from "./client";
 import { MODELS } from "./ids";
-import { parseJson } from "./json";
-import { JudgeOutput, judgeMessages, judgeSchema, summarize, type JudgeInput } from "./judging";
-import { recorded, type CallContext } from "./log";
+import { runJudge, summarize, type JudgeInput, type JudgeOutput } from "./judging";
+import type { CallContext } from "./log";
 
 // Second judge: open-weight Muse Spark Open on Baseten, judging independently.
 // If Baseten rejects the photo, it judges from SAM findings and the first judge's description.
@@ -15,26 +14,14 @@ export async function secondJudge(
 ): Promise<JudgeOutput & { textOnly: boolean }> {
   const run = async (textOnly: boolean) => {
     const photoDescription = textOnly ? await describePhoto() : undefined;
-    return recorded(
-      ctx,
-      {
-        agent: "second_judge",
-        model: MODELS.sparkOpen,
-        endpoint: "baseten /v1/chat/completions",
-        inputSummary: textOnly ? `text only: ${summarize(input)}` : summarize(input),
-      },
-      async () => {
-        const res = await ctx.client.chat({
-          provider: "baseten",
-          model: MODELS.sparkOpen,
-          effort: "medium",
-          schema: judgeSchema,
-          messages: judgeMessages(input, { photoDescription }),
-        });
-        const value = { ...parseJson(JudgeOutput, res.text), textOnly };
-        return { value, output: res.text, model: res.model, usage: res.usage };
-      },
-    );
+    const output = await runJudge(ctx, input, {
+      agent: "second_judge",
+      provider: "baseten",
+      model: MODELS.sparkOpen,
+      inputSummary: textOnly ? `text only: ${summarize(input)}` : summarize(input),
+      photoDescription,
+    });
+    return { ...output, textOnly };
   };
   try {
     return await run(false);

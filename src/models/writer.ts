@@ -1,8 +1,8 @@
 import { z } from "zod";
 import type { Brief } from "./planner";
 import { MODELS } from "./ids";
-import { jsonSchema, parseJson } from "./json";
-import { recorded, type CallContext } from "./log";
+import { jsonSchema } from "./json";
+import { parsed, recorded, type CallContext } from "./log";
 
 // Writer: Muse Spark 1.3 writes one Quest from one brief.
 
@@ -48,12 +48,7 @@ export async function writeQuest(
           },
         ],
       });
-      return {
-        value: parseJson(QuestDraft, res.text),
-        output: res.text,
-        model: res.model,
-        usage: res.usage,
-      };
+      return parsed(QuestDraft, res);
     },
   );
 }

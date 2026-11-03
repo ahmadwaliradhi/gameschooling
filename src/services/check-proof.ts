@@ -18,12 +18,17 @@ import { segment } from "#/models/segmenter";
 import { transcribe } from "#/models/transcriber";
 import { callContext, NotFoundError, type Deps } from "./deps";
 import { getChild } from "./family";
-import { pointsBalance } from "./views";
+import { latestVerdict, pointsBalance } from "./views";
 
 export type ProofInput =
   | { kind: "photo"; bytes: Uint8Array; contentType: string }
   | { kind: "voice"; wav: Uint8Array }
   | { kind: "text"; text: string };
+
+// The Proof's kind is not the one the Quest asks for (a 6-year-old is never asked to type).
+export class ProofKindError extends Error {}
+// The Quest's latest Verdict still waits for the Parent; another Proof would hide it.
+export class WaitingForParentError extends Error {}
 
 function dataUrl(bytes: Uint8Array, contentType: string) {
   let binary = "";
@@ -44,6 +49,12 @@ export async function checkProof(
     where: and(eq(quests.id, questId), eq(quests.familyId, familyId), eq(quests.status, "open")),
   });
   if (!quest) throw new NotFoundError("Quest not found");
+  if (proof.kind !== quest.proofKind) {
+    throw new ProofKindError(`This Quest needs a ${quest.proofKind} Proof`);
+  }
+  if ((await latestVerdict(db, familyId, questId))?.outcome === "needs_parent") {
+    throw new WaitingForParentError("This Quest is waiting for the Parent");
+  }
   const child = await getChild(db, familyId, quest.childId);
   const proofId = crypto.randomUUID();
   const verdictId = crypto.randomUUID();
@@ -93,28 +104,8 @@ export async function checkProof(
   );
   const [a, b] = await Promise.all([first, second]);
   const judges: JudgeRecord[] = [
-    ...(a
-      ? [
-          {
-            model: MODELS.spark,
-            decision: a.decision,
-            confidence: a.confidence,
-            reason: a.reason,
-            textOnly: false,
-          },
-        ]
-      : []),
-    ...(b
-      ? [
-          {
-            model: MODELS.sparkOpen,
-            decision: b.decision,
-            confidence: b.confidence,
-            reason: b.reason,
-            textOnly: b.textOnly,
-          },
-        ]
-      : []),
+    ...(a ? [judgeRecord(MODELS.spark, a, false)] : []),
+    ...(b ? [judgeRecord(MODELS.sparkOpen, b, b.textOnly)] : []),
   ];
   // A judge that failed leaves the decision to the Parent.
   const outcome: Outcome =
@@ -138,8 +129,21 @@ export async function checkProof(
       .insert(pointsLog)
       .values(entries.map((e) => ({ ...e, familyId, childId: quest.childId, verdictId })));
   }
-  if (outcome === "accepted") await db.update(quests).set({ status: "done" }).where(eq(quests.id, questId));
+  if (outcome === "accepted") {
+    await db
+      .update(quests)
+      .set({ status: "done" })
+      .where(and(eq(quests.id, questId), eq(quests.familyId, familyId)));
+  }
   return { verdictId, outcome };
+}
+
+function judgeRecord(
+  model: string,
+  j: { decision: JudgeRecord["decision"]; confidence: number; reason: string },
+  textOnly: boolean,
+): JudgeRecord {
+  return { model, decision: j.decision, confidence: j.confidence, reason: j.reason, textOnly };
 }
 
 export async function decideAsParent(
@@ -152,10 +156,23 @@ export async function decideAsParent(
     .from(verdicts)
     .innerJoin(proofs, eq(proofs.id, verdicts.proofId))
     .innerJoin(quests, eq(quests.id, proofs.questId))
-    .where(and(eq(verdicts.id, verdictId), eq(verdicts.familyId, familyId)));
+    .where(
+      and(
+        eq(verdicts.id, verdictId),
+        eq(verdicts.familyId, familyId),
+        eq(proofs.familyId, familyId),
+        eq(quests.familyId, familyId),
+      ),
+    );
   if (!row) throw new NotFoundError("Verdict not found");
+  // Only the Quest's latest Verdict can be decided; an older one would pay or move the Quest twice.
+  if ((await latestVerdict(db, familyId, row.quest.id))?.id !== verdictId)
+    throw new NotFoundError("Verdict not found");
   const paid = balance(
-    await db.select({ amount: pointsLog.amount }).from(pointsLog).where(eq(pointsLog.verdictId, verdictId)),
+    await db
+      .select({ amount: pointsLog.amount })
+      .from(pointsLog)
+      .where(and(eq(pointsLog.verdictId, verdictId), eq(pointsLog.familyId, familyId))),
   );
   const decision = parentDecision(
     { outcome: row.verdict.outcome, paid, points: row.quest.points },
@@ -165,7 +182,7 @@ export async function decideAsParent(
   await db
     .update(verdicts)
     .set({ outcome: decision.outcome, decidedBy: input.parentId, decidedAt: new Date() })
-    .where(eq(verdicts.id, verdictId));
+    .where(and(eq(verdicts.id, verdictId), eq(verdicts.familyId, familyId)));
   if (decision.entries.length) {
     await db
       .insert(pointsLog)
@@ -175,7 +192,7 @@ export async function decideAsParent(
     await db
       .update(quests)
       .set({ status: decision.outcome === "accepted" ? "done" : "open" })
-      .where(eq(quests.id, row.quest.id));
+      .where(and(eq(quests.id, row.quest.id), eq(quests.familyId, familyId)));
   }
 }
 

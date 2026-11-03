@@ -1,9 +1,23 @@
 import { describe, expect, it } from "vitest";
-import type { Db } from "#/db";
-import { quests } from "#/db/schema";
 import { ModelError, type Message, type ModelClient } from "#/models/client";
-import { deps, familyWithChild, fakeClient, json, memoryBlobs, testDb } from "#/test/harness";
-import { checkProof, decideAsParent, giveRewardTo } from "./check-proof";
+import {
+  deps,
+  familyWithChild,
+  fakeClient,
+  json,
+  memoryBlobs,
+  questFor,
+  rewardFor,
+  testDb,
+} from "#/test/harness";
+import {
+  checkProof,
+  decideAsParent,
+  giveRewardTo,
+  ProofKindError,
+  WaitingForParentError,
+} from "./check-proof";
+import { NotFoundError } from "./deps";
 import { childRewards, childView, modelLog, parentView, sidebar } from "./views";
 
 const verdict = (decision: "pass" | "fail", confidence: number) => ({
@@ -12,29 +26,6 @@ const verdict = (decision: "pass" | "fail", confidence: number) => ({
   reason: `${decision} because`,
   description: "three leaves on a table",
 });
-
-async function questFor(
-  db: Db,
-  familyId: string,
-  childId: string,
-  q: Partial<typeof quests.$inferInsert> = {},
-) {
-  const id = crypto.randomUUID();
-  await db.insert(quests).values({
-    id,
-    familyId,
-    childId,
-    title: "Count leaves",
-    readAloud: "Find three leaves and take a photo!",
-    proofKind: "photo",
-    lookFor: [{ phrase: "leaf", count: 3 }],
-    answer: "three leaves",
-    points: 12,
-    coverColor: "#F6D365",
-    ...q,
-  });
-  return id;
-}
 
 const photo = { kind: "photo" as const, bytes: new Uint8Array([255, 216, 255]), contentType: "image/jpeg" };
 const samLeaves =
@@ -289,12 +280,139 @@ describe("Proof check", () => {
     });
   });
 
+  it("refuses a Proof of a different kind than the Quest asks for", async () => {
+    const db = await testDb();
+    const { familyId, childId } = await familyWithChild(db);
+    const questId = await questFor(db, familyId, childId);
+    const client = fakeClient(judges(verdict("pass", 0.9), verdict("pass", 0.9)));
+
+    await expect(
+      checkProof(deps(db, client), { familyId, questId, proof: { kind: "text", text: "three" } }),
+    ).rejects.toBeInstanceOf(ProofKindError);
+
+    const view = await childView(db, familyId, childId);
+    expect(view.points).toBe(0);
+    expect(view.quests.map((q) => q.state)).toEqual(["open"]);
+    expect((await parentView(db, familyId, childId)).quests.map((q) => q.verdict)).toEqual([null]);
+  });
+
+  it("refuses a new Proof while the last one waits for the Parent", async () => {
+    const db = await testDb();
+    const { familyId, childId } = await familyWithChild(db);
+    const questId = await questFor(db, familyId, childId);
+    const disagree = fakeClient({
+      segment: async () => ({ raw: samLeaves }),
+      ...judges(verdict("pass", 0.9), verdict("fail", 0.9)),
+    });
+    const agree = fakeClient({
+      segment: async () => ({ raw: samLeaves }),
+      ...judges(verdict("pass", 0.9), verdict("pass", 0.9)),
+    });
+    await checkProof(deps(db, disagree), { familyId, questId, proof: photo });
+
+    await expect(checkProof(deps(db, agree), { familyId, questId, proof: photo })).rejects.toBeInstanceOf(
+      WaitingForParentError,
+    );
+
+    expect((await childView(db, familyId, childId)).quests.map((q) => q.state)).toEqual(["waiting"]);
+    expect((await sidebar(db, familyId))[0]!.needsParent).toBe(true);
+  });
+
+  it("asks for the Parent only about the latest Verdict, even when two Proofs crossed", async () => {
+    const db = await testDb();
+    const { familyId, childId } = await familyWithChild(db);
+    const questId = await questFor(db, familyId, childId);
+    let reached!: () => void;
+    const judging = new Promise<void>((r) => (reached = r));
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const slowDisagree = fakeClient({
+      segment: async () => ({ raw: samLeaves }),
+      chat: async ({ provider }) => {
+        reached();
+        await gate;
+        return provider === "meta"
+          ? json(verdict("pass", 0.9))
+          : json(verdict("fail", 0.9), "meta-models/muse-spark-open-1026");
+      },
+    });
+    const refuse = fakeClient({
+      segment: async () => ({ raw: samLeaves }),
+      ...judges(verdict("fail", 0.9), verdict("fail", 0.9)),
+    });
+
+    const first = checkProof(deps(db, slowDisagree), { familyId, questId, proof: photo });
+    await judging;
+    await checkProof(deps(db, refuse), { familyId, questId, proof: photo });
+    release();
+    expect((await first).outcome).toBe("needs_parent");
+
+    expect((await childView(db, familyId, childId)).quests.map((q) => q.state)).toEqual(["try_again"]);
+    expect((await sidebar(db, familyId))[0]!.needsParent).toBe(false);
+  });
+
+  it("refuses to decide a Verdict that is no longer the Quest's latest", async () => {
+    const db = await testDb();
+    const { familyId, parentId, childId } = await familyWithChild(db);
+    const questId = await questFor(db, familyId, childId);
+    const refuse = fakeClient({
+      segment: async () => ({ raw: samLeaves }),
+      ...judges(verdict("fail", 0.9), verdict("fail", 0.9)),
+    });
+    const agree = fakeClient({
+      segment: async () => ({ raw: samLeaves }),
+      ...judges(verdict("pass", 0.9), verdict("pass", 0.9)),
+    });
+    const old = await checkProof(deps(db, refuse), { familyId, questId, proof: photo });
+    await checkProof(deps(db, agree), { familyId, questId, proof: photo });
+
+    await expect(
+      decideAsParent(db, { familyId, parentId, verdictId: old.verdictId, choice: "accept" }),
+    ).rejects.toBeInstanceOf(NotFoundError);
+
+    const view = await childView(db, familyId, childId);
+    expect(view.points).toBe(12);
+    expect(view.quests).toEqual([]);
+  });
+
+  it("keeps one Family's Quests and Verdicts out of another Family's reach", async () => {
+    const db = await testDb();
+    const a = await familyWithChild(db);
+    const b = await familyWithChild(db);
+    const questId = await questFor(db, a.familyId, a.childId);
+    const disagree = fakeClient({
+      segment: async () => ({ raw: samLeaves }),
+      ...judges(verdict("pass", 0.9), verdict("fail", 0.9)),
+    });
+    const agree = fakeClient({
+      segment: async () => ({ raw: samLeaves }),
+      ...judges(verdict("pass", 0.9), verdict("pass", 0.9)),
+    });
+    const { verdictId } = await checkProof(deps(db, disagree), {
+      familyId: a.familyId,
+      questId,
+      proof: photo,
+    });
+
+    await expect(
+      decideAsParent(db, { familyId: b.familyId, parentId: b.parentId, verdictId, choice: "accept" }),
+    ).rejects.toBeInstanceOf(NotFoundError);
+    await expect(
+      checkProof(deps(db, agree), { familyId: b.familyId, questId, proof: photo }),
+    ).rejects.toBeInstanceOf(NotFoundError);
+
+    const view = await childView(db, a.familyId, a.childId);
+    expect(view.points).toBe(0);
+    expect(view.quests.map((q) => q.state)).toEqual(["waiting"]);
+    expect((await sidebar(db, a.familyId))[0]!.needsParent).toBe(true);
+    expect((await sidebar(db, b.familyId))[0]!.points).toBe(0);
+  });
+
   it("gives a Reward by subtracting its Points", async () => {
     const db = await testDb();
     const { familyId, childId } = await familyWithChild(db);
     const questId = await questFor(db, familyId, childId, { proofKind: "text", lookFor: [], points: 20 });
-    const { rewards } = await import("#/db/schema");
-    await db.insert(rewards).values({ familyId, childId, name: "sticker", price: 15 });
+    await rewardFor(db, familyId, childId, "sticker", 15);
     const client = fakeClient(judges(verdict("pass", 0.9), verdict("pass", 0.9)));
     await checkProof(deps(db, client), { familyId, questId, proof: { kind: "text", text: "ok" } });
     const [sticker] = await childRewards(db, familyId, childId);

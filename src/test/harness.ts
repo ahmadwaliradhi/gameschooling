@@ -73,3 +73,31 @@ export function deps(db: Db, client: ModelClient, blobs = memoryBlobs()): Deps {
     pause: async () => {},
   };
 }
+
+// A ready Quest for tests that start after Make quests. Defaults to a photo Quest worth 12 Points.
+export async function questFor(
+  db: Db,
+  familyId: string,
+  childId: string,
+  q: Partial<typeof schema.quests.$inferInsert> = {},
+) {
+  const id = crypto.randomUUID();
+  await db.insert(schema.quests).values({
+    id,
+    familyId,
+    childId,
+    title: "Count leaves",
+    readAloud: "Find three leaves and take a photo!",
+    proofKind: "photo",
+    lookFor: [{ phrase: "leaf", count: 3 }],
+    answer: "three leaves",
+    points: 12,
+    coverColor: "#F6D365",
+    ...q,
+  });
+  return id;
+}
+
+export async function rewardFor(db: Db, familyId: string, childId: string, name: string, price: number) {
+  await db.insert(schema.rewards).values({ familyId, childId, name, price });
+}

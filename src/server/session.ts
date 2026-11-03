@@ -12,11 +12,18 @@ export async function requireParent(headers?: Headers) {
   return ensureFamily(db(), session.user.id);
 }
 
-export async function currentParent() {
+// requireParent, but a signed-out request gets `signedOut()` instead of a throw.
+export async function parentOr<T>(signedOut: () => T, headers?: Headers) {
   try {
-    return await requireParent();
+    return await requireParent(headers);
   } catch (e) {
-    if (e instanceof SignedOutError) return null;
+    if (e instanceof SignedOutError) return signedOut();
     throw e;
   }
 }
+
+export const currentParent = () => parentOr(() => null);
+
+// For API routes: the Parent, or a 401 Response to return as is.
+export const parentOr401 = (request: Request) =>
+  parentOr(() => new Response("Signed out", { status: 401 }), request.headers);

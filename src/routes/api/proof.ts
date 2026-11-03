@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { deps } from "#/server/deps";
-import { requireParent, SignedOutError } from "#/server/session";
-import { checkProof, type ProofInput } from "#/services/check-proof";
+import { parentOr401 } from "#/server/session";
+import { checkProof, ProofKindError, type ProofInput, WaitingForParentError } from "#/services/check-proof";
 import { NotFoundError } from "#/services/deps";
 
 const MAX_BYTES = 12 * 1024 * 1024;
@@ -11,7 +11,9 @@ export const Route = createFileRoute("/api/proof")({
     handlers: {
       POST: async ({ request }) => {
         try {
-          const { familyId } = await requireParent(request.headers);
+          const parent = await parentOr401(request);
+          if (parent instanceof Response) return parent;
+          const { familyId } = parent;
           const form = await request.formData();
           const questId = String(form.get("questId") ?? "");
           const kind = String(form.get("kind") ?? "");
@@ -29,8 +31,9 @@ export const Route = createFileRoute("/api/proof")({
           }
           return Response.json(await checkProof(deps(), { familyId, questId, proof }));
         } catch (e) {
-          if (e instanceof SignedOutError) return new Response("Signed out", { status: 401 });
           if (e instanceof NotFoundError) return new Response(e.message, { status: 404 });
+          if (e instanceof ProofKindError) return new Response(e.message, { status: 400 });
+          if (e instanceof WaitingForParentError) return new Response(e.message, { status: 409 });
           console.error(e);
           return new Response("Could not check the Proof", { status: 502 });
         }

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { deps } from "#/server/deps";
-import { requireParent, SignedOutError } from "#/server/session";
+import { parentOr401 } from "#/server/session";
 import { DEMO_FAMILY_ID } from "#/services/demo";
 
 // Serves covers and photos from R2 to the Family that owns them.
@@ -8,13 +8,9 @@ export const Route = createFileRoute("/api/files/$")({
   server: {
     handlers: {
       GET: async ({ request, params }) => {
-        let familyId: string;
-        try {
-          ({ familyId } = await requireParent(request.headers));
-        } catch (e) {
-          if (e instanceof SignedOutError) return new Response("Signed out", { status: 401 });
-          throw e;
-        }
+        const parent = await parentOr401(request);
+        if (parent instanceof Response) return parent;
+        const { familyId } = parent;
         const key = params._splat ?? "";
         const [prefix, owner] = key.split("/");
         const allowed = prefix === "demo" ? familyId === DEMO_FAMILY_ID : owner === familyId;

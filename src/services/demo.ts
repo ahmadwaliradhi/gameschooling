@@ -301,7 +301,7 @@ export async function seedDemo(db: Db, blobs: Blobs) {
         familyId: DEMO_FAMILY_ID,
         questId,
         kind: q.proofKind,
-        photoKey: q.proof.photo ?? null,
+        photoKey: q.proof.photo && (await blobs.get(q.proof.photo)) ? q.proof.photo : null,
         transcript:
           q.proof.transcript?.map((t, i) => ({ ...t, startMs: i * 3000, endMs: i * 3000 + 2500 })) ?? null,
         text: q.proof.text ?? null,

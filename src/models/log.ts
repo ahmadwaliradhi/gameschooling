@@ -1,6 +1,8 @@
 import type { Agent, modelCalls } from "#/db/schema";
-import type { ModelClient, Usage } from "./client";
+import type { z } from "zod";
+import type { ModelClient, TextResult, Usage } from "./client";
 import { ModelError } from "./client";
+import { parseJson } from "./json";
 import { costUsd } from "./pricing";
 
 export type CallRow = Omit<typeof modelCalls.$inferInsert, "id" | "createdAt">;
@@ -24,6 +26,11 @@ export type Recorded<T> = {
   images?: number;
   audioMs?: number;
 };
+
+// A text model's reply as a Recorded: the parsed JSON as the value, the raw text as the log output.
+export function parsed<T>(schema: z.ZodType<T>, res: TextResult): Recorded<T> {
+  return { value: parseJson(schema, res.text), output: res.text, model: res.model, usage: res.usage };
+}
 
 // Runs one model call and writes its model log row, on success and on failure.
 export async function recorded<T>(

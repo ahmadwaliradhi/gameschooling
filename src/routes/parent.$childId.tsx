@@ -199,6 +199,11 @@ function QuestRow(props: { quest: Quest }) {
             q.verdict?.outcome === "needs_parent" ? "font-medium" : "text-muted-foreground",
           )}
         >
+          {q.verdict && q.verdict.decidedBy !== "models" && q.verdict.modelOutcome !== q.verdict.outcome && (
+            <s className="mr-2" title={new Date(q.verdict.decidedAt).toLocaleString()}>
+              {OUTCOME[q.verdict.modelOutcome]}
+            </s>
+          )}
           {outcome}
         </span>
         <span className="w-8 text-right text-sm tabular-nums text-muted-foreground">{q.points}</span>
@@ -236,12 +241,6 @@ function QuestRow(props: { quest: Quest }) {
                   </Button>
                 ))}
               </div>
-              {q.verdict.decidedBy !== "models" && (
-                <p className="text-xs text-muted-foreground">
-                  You changed {OUTCOME[q.verdict.modelOutcome]} to {OUTCOME[q.verdict.outcome]} on{" "}
-                  {new Date(q.verdict.decidedAt).toLocaleString()}
-                </p>
-              )}
               <ModelLog of={{ verdictId: q.verdict.id }} />
             </>
           ) : null}

@@ -6,7 +6,7 @@ import { plan, type Brief } from "#/models/planner";
 import { writeQuest, type QuestDraft } from "#/models/writer";
 import { callContext, type Deps } from "./deps";
 import { getChild, getPlanText } from "./family";
-import { childView } from "./views";
+import { questStates } from "./views";
 
 // Muse Image allows 150 requests a minute.
 export const COVER_SPACING_MS = 500;
@@ -47,7 +47,11 @@ export async function* makeQuests(
     orderBy: desc(quests.createdAt),
     limit: 15,
   });
-  const states = new Map((await childView(db, familyId, childId)).quests.map((q) => [q.id, q.state]));
+  const states = await questStates(
+    db,
+    familyId,
+    recentQuests.map((q) => q.id),
+  );
   const recent = recentQuests.map((q) => ({
     title: q.title,
     outcome: q.status === "done" ? "done" : (states.get(q.id) ?? null),
@@ -107,7 +111,10 @@ export async function* makeQuests(
       );
       const key = `covers/${familyId}/${quest.questId}.webp`;
       await deps.blobs.put(key, image.bytes, image.contentType);
-      await db.update(quests).set({ coverKey: key }).where(eq(quests.id, quest.questId));
+      await db
+        .update(quests)
+        .set({ coverKey: key })
+        .where(and(eq(quests.id, quest.questId), eq(quests.familyId, familyId)));
       yield `Drew a cover for "${quest.title}"`;
     } catch {
       yield `No cover for "${quest.title}"`;

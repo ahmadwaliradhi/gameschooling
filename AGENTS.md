@@ -4,7 +4,7 @@ Read [`GLOSSARY.md`](GLOSSARY.md) first and use its words. Spec: GitHub issue #2
 
 ## Scripts
 
-- `pnpm dev`: local app on :3000 with local D1 and R2 (applies migrations first). Secrets in `.dev.vars` (copy `.dev.vars.example`).
+- `pnpm dev`: local app on :3000 with local D1 and R2 (applies migrations first). Secrets in `.dev.vars` (`cp .env.example .dev.vars`).
 - `pnpm check`: oxlint, oxfmt, `tsc`, Vitest. Run before every commit.
 - `pnpm test` / `pnpm vitest run <file>`: tests only.
 - `pnpm smoke`: calls every Meta and Baseten endpoint once with real keys. Not part of `check`.

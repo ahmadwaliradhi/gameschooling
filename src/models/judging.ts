@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { LookFor, SamFinding, TranscriptTurn } from "#/db/schema";
 import type { Message, Part } from "./client";
 import { jsonSchema } from "./json";
+import { parsed, recorded, type CallContext } from "./log";
 
 // Shared by both judges: same input, same output.
 
@@ -73,4 +74,37 @@ export function summarize(input: JudgeInput): string {
   if (e.kind === "photo") return `photo + ${e.findings.length} SAM findings`;
   if (e.kind === "voice") return `transcript, ${e.turns.length} turns`;
   return `typed answer, ${e.text.length} chars`;
+}
+
+// One judging call, logged. Each judge module picks its own model, provider and log label.
+export function runJudge(
+  ctx: CallContext,
+  input: JudgeInput,
+  call: {
+    agent: "judge" | "second_judge";
+    provider: "meta" | "baseten";
+    model: string;
+    inputSummary: string;
+    photoDescription?: string;
+  },
+): Promise<JudgeOutput> {
+  return recorded(
+    ctx,
+    {
+      agent: call.agent,
+      model: call.model,
+      endpoint: `${call.provider} /v1/chat/completions`,
+      inputSummary: call.inputSummary,
+    },
+    async () => {
+      const res = await ctx.client.chat({
+        provider: call.provider,
+        model: call.model,
+        effort: "medium",
+        schema: judgeSchema,
+        messages: judgeMessages(input, { photoDescription: call.photoDescription }),
+      });
+      return parsed(JudgeOutput, res);
+    },
+  );
 }

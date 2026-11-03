@@ -51,7 +51,7 @@ Privacy: Parent-supervised, no Child accounts, no Child names sent to models, vo
 
 ```bash
 pnpm install
-cp .dev.vars.example .dev.vars   # fill in keys
+cp .env.example .dev.vars   # fill in keys
 pnpm dev                         # http://localhost:3000, local D1 and R2
 pnpm check                       # oxlint, oxfmt, tsc, tests
 pnpm smoke                       # one call to every model endpoint

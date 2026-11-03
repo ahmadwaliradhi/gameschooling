@@ -15,46 +15,57 @@ export async function pointsBalance(db: Db, familyId: string, childId: string): 
 }
 
 async function latestVerdicts(db: Db, familyId: string, questIds: string[]) {
-  if (questIds.length === 0)
-    return new Map<string, typeof verdicts.$inferSelect & { proof: typeof proofs.$inferSelect }>();
-  const rows = await db
-    .select({ verdict: verdicts, proof: proofs })
-    .from(verdicts)
-    .innerJoin(proofs, eq(proofs.id, verdicts.proofId))
-    .where(and(eq(verdicts.familyId, familyId), inArray(proofs.questId, questIds)))
-    .orderBy(asc(proofs.createdAt));
   const latest = new Map<string, typeof verdicts.$inferSelect & { proof: typeof proofs.$inferSelect }>();
-  for (const r of rows) latest.set(r.proof.questId, { ...r.verdict, proof: r.proof });
+  // D1 allows at most 100 bound parameters per query, so ask in chunks.
+  for (let i = 0; i < questIds.length; i += 90) {
+    const rows = await db
+      .select({ verdict: verdicts, proof: proofs })
+      .from(verdicts)
+      .innerJoin(proofs, eq(proofs.id, verdicts.proofId))
+      .where(
+        and(
+          eq(verdicts.familyId, familyId),
+          eq(proofs.familyId, familyId),
+          inArray(proofs.questId, questIds.slice(i, i + 90)),
+        ),
+      )
+      // created_at is in whole seconds, so insert order breaks ties.
+      .orderBy(asc(proofs.createdAt), asc(sql`${proofs}.rowid`));
+    for (const r of rows) latest.set(r.proof.questId, { ...r.verdict, proof: r.proof });
+  }
   return latest;
 }
 
+export async function latestVerdict(db: Db, familyId: string, questId: string) {
+  return (await latestVerdicts(db, familyId, [questId])).get(questId) ?? null;
+}
+
 export async function sidebar(db: Db, familyId: string) {
-  const kids = await db.query.children.findMany({
+  const childRows = await db.query.children.findMany({
     where: eq(children.familyId, familyId),
     orderBy: asc(children.createdAt),
   });
-  const waiting = await db
-    .select({ childId: quests.childId })
-    .from(verdicts)
-    .innerJoin(proofs, eq(proofs.id, verdicts.proofId))
-    .innerJoin(quests, eq(quests.id, proofs.questId))
-    .where(
-      and(
-        eq(verdicts.familyId, familyId),
-        eq(verdicts.outcome, "needs_parent"),
-        ne(quests.status, "deleted"),
-      ),
-    );
+  const live = await db
+    .select({ id: quests.id, childId: quests.childId })
+    .from(quests)
+    .where(and(eq(quests.familyId, familyId), ne(quests.status, "deleted")));
+  // Only the latest Verdict of a Quest is shown, so only it can be waiting for the Parent.
+  const latest = await latestVerdicts(
+    db,
+    familyId,
+    live.map((q) => q.id),
+  );
+  const waiting = live.filter((q) => latest.get(q.id)?.outcome === "needs_parent");
   const totals = await db
     .select({ childId: pointsLog.childId, total: sql<number>`sum(${pointsLog.amount})` })
     .from(pointsLog)
     .where(eq(pointsLog.familyId, familyId))
     .groupBy(pointsLog.childId);
   const waitingSet = new Set(waiting.map((w) => w.childId));
-  return kids.map((k) => ({
-    ...k,
-    points: Number(totals.find((t) => t.childId === k.id)?.total ?? 0),
-    needsParent: waitingSet.has(k.id),
+  return childRows.map((c) => ({
+    ...c,
+    points: Number(totals.find((t) => t.childId === c.id)?.total ?? 0),
+    needsParent: waitingSet.has(c.id),
   }));
 }
 
@@ -95,13 +106,26 @@ export async function parentView(db: Db, familyId: string, childId: string) {
 
 export type ChildQuestState = "open" | "waiting" | "try_again";
 
+// What the Child sees on each Quest, from its latest Verdict.
+export async function questStates(db: Db, familyId: string, questIds: string[]) {
+  const latest = await latestVerdicts(db, familyId, questIds);
+  return new Map(
+    questIds.map((id) => {
+      const outcome = latest.get(id)?.outcome;
+      const state: ChildQuestState =
+        outcome === "needs_parent" ? "waiting" : outcome === "not_yet" ? "try_again" : "open";
+      return [id, state];
+    }),
+  );
+}
+
 export async function childView(db: Db, familyId: string, childId: string) {
   const child = await getChild(db, familyId, childId);
   const rows = await db.query.quests.findMany({
     where: and(eq(quests.familyId, familyId), eq(quests.childId, childId), eq(quests.status, "open")),
     orderBy: desc(quests.createdAt),
   });
-  const latest = await latestVerdicts(
+  const states = await questStates(
     db,
     familyId,
     rows.map((q) => q.id),
@@ -111,12 +135,7 @@ export async function childView(db: Db, familyId: string, childId: string) {
     child,
     points,
     nextReward: nextReward(points, await childRewards(db, familyId, childId)),
-    quests: rows.map((q) => {
-      const outcome = latest.get(q.id)?.outcome;
-      const state: ChildQuestState =
-        outcome === "needs_parent" ? "waiting" : outcome === "not_yet" ? "try_again" : "open";
-      return { ...q, state };
-    }),
+    quests: rows.map((q) => ({ ...q, state: states.get(q.id) ?? "open" })),
   };
 }
 
@@ -125,8 +144,7 @@ export async function questForChild(db: Db, familyId: string, questId: string) {
     where: and(eq(quests.id, questId), eq(quests.familyId, familyId)),
   });
   if (!quest) return null;
-  const latest = (await latestVerdicts(db, familyId, [questId])).get(questId) ?? null;
-  return { quest, verdict: latest };
+  return { quest, verdict: await latestVerdict(db, familyId, questId) };
 }
 
 // The model log behind a Quest (its Make quests run) or a Verdict (its Proof check).

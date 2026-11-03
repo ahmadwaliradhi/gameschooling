@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { jsonSchema, parseJson } from "./json";
-import { recorded, type CallContext } from "./log";
+import { jsonSchema } from "./json";
+import { parsed, recorded, type CallContext } from "./log";
 
 // Planner: Muse Wonder turns a Plan into Quest briefs and reads the Rewards out of it.
 
@@ -59,15 +59,8 @@ export async function plan(
         endpoint: "meta /v1/responses",
         inputSummary: `age ${input.age}, plan ${input.planText.length} chars, ${input.recent.length} recent Quests`,
       },
-      async () => {
-        const res = await ctx.client.respond({ model, messages, effort: "high", schema });
-        return {
-          value: parseJson(PlannerOutput, res.text),
-          output: res.text,
-          model: res.model,
-          usage: res.usage,
-        };
-      },
+      async () =>
+        parsed(PlannerOutput, await ctx.client.respond({ model, messages, effort: "high", schema })),
     );
   try {
     return await run(models.primary);

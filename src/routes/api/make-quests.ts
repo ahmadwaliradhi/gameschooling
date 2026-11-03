@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { deps } from "#/server/deps";
-import { requireParent, SignedOutError } from "#/server/session";
+import { parentOr401 } from "#/server/session";
 import { makeQuests } from "#/services/make-quests";
 
 // One request that streams progress lines while Quests are made.
@@ -8,13 +8,8 @@ export const Route = createFileRoute("/api/make-quests")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        let parent;
-        try {
-          parent = await requireParent(request.headers);
-        } catch (e) {
-          if (e instanceof SignedOutError) return new Response("Signed out", { status: 401 });
-          throw e;
-        }
+        const parent = await parentOr401(request);
+        if (parent instanceof Response) return parent;
         const { childId } = (await request.json()) as { childId: string };
         const lines = makeQuests(deps(), { familyId: parent.familyId, childId });
         const encoder = new TextEncoder();

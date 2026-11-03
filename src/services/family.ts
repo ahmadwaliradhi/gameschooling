@@ -14,11 +14,9 @@ export async function ensureFamily(db: Db, userId: string): Promise<{ familyId: 
   return { familyId, parentId };
 }
 
-export async function addChild(
-  db: Db,
-  familyId: string,
-  child: { nickname: string; birthYear: number },
-): Promise<string> {
+export type ChildFields = { nickname: string; birthYear: number };
+
+export async function addChild(db: Db, familyId: string, child: ChildFields): Promise<string> {
   const id = crypto.randomUUID();
   await db
     .insert(children)
@@ -27,12 +25,7 @@ export async function addChild(
   return id;
 }
 
-export async function updateChild(
-  db: Db,
-  familyId: string,
-  childId: string,
-  child: { nickname: string; birthYear: number },
-) {
+export async function updateChild(db: Db, familyId: string, childId: string, child: ChildFields) {
   await db
     .update(children)
     .set({ nickname: child.nickname.trim(), birthYear: child.birthYear })

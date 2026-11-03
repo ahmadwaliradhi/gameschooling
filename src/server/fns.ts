@@ -5,16 +5,12 @@ import { decideAsParent, giveRewardTo } from "#/services/check-proof";
 import { addChild, deleteQuest, removeChild, savePlan, updateChild } from "#/services/family";
 import { childView, modelLog, parentView, questForChild, sidebar } from "#/services/views";
 import { db } from "./deps";
-import { currentParent, requireParent, SignedOutError } from "./session";
+import { currentParent, parentOr } from "./session";
 
-async function parentOrRedirect() {
-  try {
-    return await requireParent();
-  } catch (e) {
-    if (e instanceof SignedOutError) throw redirect({ to: "/" });
-    throw e;
-  }
-}
+const parentOrRedirect = () =>
+  parentOr(() => {
+    throw redirect({ to: "/" });
+  });
 
 const ChildInput = z.object({
   nickname: z.string().trim().min(1).max(40),
