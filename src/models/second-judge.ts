@@ -5,6 +5,8 @@ import type { CallContext } from "./log";
 
 // Second judge: open-weight Muse Spark Open on Baseten, judging independently.
 // If Baseten rejects the photo, it judges from SAM findings and the first judge's description.
+// Auth and rate-limit errors are not a rejected photo: they fail loudly instead of falling back.
+const NOT_A_REJECTION = [401, 403, 408, 429];
 
 export async function secondJudge(
   ctx: CallContext,
@@ -26,7 +28,12 @@ export async function secondJudge(
   try {
     return await run(false);
   } catch (e) {
-    const rejected = e instanceof ModelError && e.status !== null && e.status >= 400 && e.status < 500;
+    const rejected =
+      e instanceof ModelError &&
+      e.status !== null &&
+      e.status >= 400 &&
+      e.status < 500 &&
+      !NOT_A_REJECTION.includes(e.status);
     if (input.evidence.kind !== "photo" || !rejected) throw e;
     return run(true);
   }
