@@ -1,6 +1,7 @@
 import { and, desc, eq, ne } from "drizzle-orm";
 import { quests, rewards } from "#/db/schema";
 import { ageOf, proofKindFor, questPoints } from "#/domain/quest";
+import { guardQuest } from "#/models/guardian";
 import { drawCover } from "#/models/illustrator";
 import { plan, type Brief } from "#/models/planner";
 import { writeQuest, type QuestDraft } from "#/models/writer";
@@ -54,7 +55,7 @@ export async function* makeQuests(
   );
   const recent = recentQuests.map((q) => ({
     title: q.title,
-    outcome: q.status === "done" ? "done" : (states.get(q.id) ?? null),
+    outcome: q.status === "open" ? (states.get(q.id) ?? null) : q.status,
   }));
 
   yield "Reading the Plan";
@@ -81,7 +82,14 @@ export async function* makeQuests(
   const briefs = planned.quests.map((brief) => ({ brief, questId: crypto.randomUUID() }));
   const written: { questId: string; title: string; coverPrompt: string }[] = [];
   const drafts = briefs.map(async ({ brief, questId }, i) => {
-    const draft = await writeQuest(callContext(deps, { familyId, runId, questId }), { brief, planText, age });
+    const ctx = callContext(deps, { familyId, runId, questId });
+    // Written, then checked by the Guardian; one rewrite, then the Quest is dropped for the Parent.
+    let draft = await writeQuest(ctx, { brief, planText, age });
+    let check = await guard(ctx, draft, { age, planText });
+    if (!check.safe) {
+      draft = await writeQuest(ctx, { brief, planText, age, feedback: check.reason });
+      check = await guard(ctx, draft, { age, planText });
+    }
     await saveQuest(deps, {
       familyId,
       childId,
@@ -90,15 +98,18 @@ export async function* makeQuests(
       draft,
       age,
       color: COVER_COLORS[i % COVER_COLORS.length],
+      droppedReason: check.safe ? null : check.reason,
     });
-    return { questId, title: draft.title, coverPrompt: draft.cover_prompt };
+    return { questId, title: draft.title, coverPrompt: draft.cover_prompt, safe: check.safe };
   });
   for await (const result of inCompletionOrder(drafts)) {
-    if (result.status === "fulfilled") {
+    if (result.status === "rejected") {
+      yield "Could not write one Quest";
+    } else if (result.value.safe) {
       written.push(result.value);
       yield `Wrote "${result.value.title}"`;
     } else {
-      yield "Could not write one Quest";
+      yield `Dropped "${result.value.title}"`;
     }
   }
 
@@ -124,6 +135,24 @@ export async function* makeQuests(
   yield `Made ${written.length} Quests`;
 }
 
+async function guard(
+  ctx: ReturnType<typeof callContext>,
+  draft: QuestDraft,
+  input: { age: number; planText: string },
+) {
+  try {
+    const check = await guardQuest(ctx, {
+      title: draft.title,
+      readAloud: draft.read_aloud,
+      coverPrompt: draft.cover_prompt,
+      ...input,
+    });
+    return check.safe ? check : { safe: false, reason: check.reason.trim() || "Not safe for this Child" };
+  } catch {
+    return { safe: false, reason: "Could not be checked for safety" };
+  }
+}
+
 async function saveQuest(
   deps: Deps,
   q: {
@@ -134,6 +163,7 @@ async function saveQuest(
     draft: QuestDraft;
     age: number;
     color: string;
+    droppedReason: string | null;
   },
 ) {
   const proofKind = proofKindFor(q.brief.proof_kind, q.age);
@@ -149,5 +179,7 @@ async function saveQuest(
     recitation: q.brief.recitation,
     points: questPoints(q.brief.points),
     coverColor: q.color,
+    status: q.droppedReason === null ? "open" : "dropped",
+    droppedReason: q.droppedReason,
   });
 }

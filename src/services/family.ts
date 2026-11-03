@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import type { Db } from "#/db";
-import { children, families, parents, plans, quests } from "#/db/schema";
+import { children, families, parents, plans, quests, user } from "#/db/schema";
 import { NotFoundError } from "./deps";
 
 // A Parent signing in for the first time gets a Family.
@@ -12,6 +12,16 @@ export async function ensureFamily(db: Db, userId: string): Promise<{ familyId: 
   await db.insert(families).values({ id: familyId });
   await db.insert(parents).values({ id: parentId, familyId, userId });
   return { familyId, parentId };
+}
+
+// Each Parent's display name by Parent id, to show who decided what.
+export async function parentNames(db: Db, familyId: string): Promise<Map<string, string>> {
+  const rows = await db
+    .select({ id: parents.id, name: user.name })
+    .from(parents)
+    .innerJoin(user, eq(user.id, parents.userId))
+    .where(eq(parents.familyId, familyId));
+  return new Map(rows.map((r) => [r.id, r.name]));
 }
 
 export type ChildFields = { nickname: string; birthYear: number };
@@ -29,6 +39,20 @@ export async function updateChild(db: Db, familyId: string, childId: string, chi
   await db
     .update(children)
     .set({ nickname: child.nickname.trim(), birthYear: child.birthYear })
+    .where(and(eq(children.id, childId), eq(children.familyId, familyId)));
+}
+
+// The Parent's switches for one Child.
+export async function setChildSettings(
+  db: Db,
+  familyId: string,
+  childId: string,
+  settings: { stakes?: boolean | null; siblingBoard?: boolean },
+) {
+  await getChild(db, familyId, childId);
+  await db
+    .update(children)
+    .set(settings)
     .where(and(eq(children.id, childId), eq(children.familyId, familyId)));
 }
 

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 const id = () =>
   text("id")
@@ -68,6 +68,8 @@ export const verification = sqliteTable("verification", {
 // GameSchooling tables. Every row carries family_id.
 export const families = sqliteTable("families", {
   id: id(),
+  // Family Goal: on by default; only shown with two or more Children.
+  familyGoal: integer("family_goal", { mode: "boolean" }).notNull().default(true),
   createdAt: createdAt(),
 });
 
@@ -88,6 +90,13 @@ export const children = sqliteTable(
     familyId: familyId(),
     nickname: text("nickname").notNull(),
     birthYear: integer("birth_year").notNull(),
+    // The Parent's Stakes switch; null means the default for the Child's age.
+    stakes: integer("stakes", { mode: "boolean" }),
+    siblingBoard: integer("sibling_board", { mode: "boolean" }).notNull().default(false),
+    // Optional 4-digit PIN: salted SHA-256, never the PIN itself.
+    pinHash: text("pin_hash"),
+    pinFailures: integer("pin_failures").notNull().default(0),
+    pinPausedUntil: integer("pin_paused_until", { mode: "timestamp_ms" }),
     createdAt: createdAt(),
   },
   (t) => [index("children_family").on(t.familyId)],
@@ -106,7 +115,7 @@ export const plans = sqliteTable("plans", {
     .default(sql`(unixepoch() * 1000)`),
 });
 
-export type ProofKindColumn = "photo" | "voice" | "text";
+export type ProofKindColumn = "photo" | "voice" | "text" | "worksheet";
 export type LookFor = { phrase: string; count: number };
 
 export const quests = sqliteTable(
@@ -129,7 +138,11 @@ export const quests = sqliteTable(
     points: integer("points").notNull(),
     coverKey: text("cover_key"),
     coverColor: text("cover_color").notNull(),
-    status: text("status").$type<"open" | "done" | "deleted">().notNull().default("open"),
+    // "dropped": failed the Guardian check twice; shown to the Parent only, with the reason.
+    status: text("status").$type<"open" | "done" | "deleted" | "dropped">().notNull().default("open"),
+    droppedReason: text("dropped_reason"),
+    // The Stake the Child chose for their next Proof, if any.
+    stakeMultiplier: real("stake_multiplier"),
     createdAt: createdAt(),
   },
   (t) => [index("quests_child").on(t.childId, t.status)],
@@ -149,6 +162,11 @@ export const proofs = sqliteTable(
     photoKey: text("photo_key"),
     transcript: text("transcript", { mode: "json" }).$type<TranscriptTurn[]>(),
     text: text("text"),
+    // Bonus Points at Stake on this Proof's Verdict.
+    stakeBonus: integer("stake_bonus"),
+    // Displayed photo size, for Worksheet Proof box prompts.
+    photoWidth: integer("photo_width"),
+    photoHeight: integer("photo_height"),
     createdAt: createdAt(),
   },
   (t) => [index("proofs_quest").on(t.questId)],
@@ -209,7 +227,7 @@ export const pointsLog = sqliteTable(
     childId: text("child_id")
       .notNull()
       .references(() => children.id, { onDelete: "cascade" }),
-    kind: text("kind").$type<"earned" | "reward_given" | "overrule">().notNull(),
+    kind: text("kind").$type<"earned" | "reward_given" | "overrule" | "stake_won" | "stake_lost">().notNull(),
     amount: integer("amount").notNull(),
     verdictId: text("verdict_id").references(() => verdicts.id, { onDelete: "set null" }),
     rewardName: text("reward_name"),
@@ -225,7 +243,10 @@ export type Agent =
   | "segmenter"
   | "transcriber"
   | "judge"
-  | "second_judge";
+  | "second_judge"
+  | "guardian"
+  | "worksheet_reader"
+  | "digest";
 
 export const modelCalls = sqliteTable(
   "model_calls",
@@ -251,4 +272,89 @@ export const modelCalls = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [index("model_calls_run").on(t.runId), index("model_calls_proof").on(t.proofId)],
+);
+
+// Worksheet Proof: one Verdict per answer found on the photo. The Proof's own Verdict sums them up.
+export type AnswerBox = { x1: number; y1: number; x2: number; y2: number };
+
+export const answerVerdicts = sqliteTable(
+  "answer_verdicts",
+  {
+    id: id(),
+    familyId: familyId(),
+    verdictId: text("verdict_id")
+      .notNull()
+      .references(() => verdicts.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    question: text("question").notNull(),
+    // What the reader saw written; "" when it could not read it.
+    reading: text("reading").notNull(),
+    box: text("box", { mode: "json" }).$type<AnswerBox>().notNull(),
+    judges: text("judges", { mode: "json" }).$type<JudgeRecord[]>().notNull(),
+    modelOutcome: text("model_outcome").$type<Outcome>().notNull(),
+    outcome: text("outcome").$type<Outcome>().notNull(),
+    decidedBy: text("decided_by").notNull(),
+    decidedAt: integer("decided_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [index("answer_verdicts_verdict").on(t.verdictId)],
+);
+
+// Recorded by a Parent only, never by a model. Never shown to Children; never touches Points.
+export const consequences = sqliteTable(
+  "consequences",
+  {
+    id: id(),
+    familyId: familyId(),
+    childId: text("child_id")
+      .notNull()
+      .references(() => children.id, { onDelete: "cascade" }),
+    privilege: text("privilege").notNull(),
+    reason: text("reason").notNull(),
+    parentId: text("parent_id").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("consequences_child").on(t.childId)],
+);
+
+// One per Family per week, keyed by the week's Monday ("YYYY-MM-DD").
+export const familyGoals = sqliteTable(
+  "family_goals",
+  {
+    id: id(),
+    familyId: familyId(),
+    week: text("week").notNull(),
+    target: integer("target").notNull(),
+    rewardName: text("reward_name").notNull(),
+    givenAt: integer("given_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [uniqueIndex("family_goals_week").on(t.familyId, t.week)],
+);
+
+export type DigestEntry = { childId: string; learned: string; struggled: string; verdictIds: string[] };
+
+export const digests = sqliteTable(
+  "digests",
+  {
+    id: id(),
+    familyId: familyId(),
+    week: text("week").notNull(),
+    runId: text("run_id").notNull(),
+    entries: text("entries", { mode: "json" }).$type<DigestEntry[]>().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("digests_week").on(t.familyId, t.week)],
+);
+
+// A single-use link that makes another adult an equal Parent of the Family.
+export const invites = sqliteTable(
+  "invites",
+  {
+    id: id(),
+    familyId: familyId(),
+    createdBy: text("created_by").notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    usedAt: integer("used_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("invites_family").on(t.familyId)],
 );

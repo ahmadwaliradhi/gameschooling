@@ -15,6 +15,11 @@ function QuestGrid() {
         <Link to="/play" className="text-2xl font-semibold">
           {view.child.nickname}
         </Link>
+        {view.streak && view.streak.weeks > 0 && (
+          <span className="ml-auto text-lg text-muted-foreground" title="Weeks in a row with Points">
+            {view.streak.weeks} {view.streak.weeks === 1 ? "week" : "weeks"}
+          </span>
+        )}
         <span className="ml-auto rounded-full bg-primary px-4 py-1 text-2xl font-semibold tabular-nums text-primary-foreground">
           {view.points}
         </span>
@@ -32,6 +37,34 @@ function QuestGrid() {
             />
           </div>
         </div>
+      )}
+      {view.familyGoal && !view.familyGoal.given && (
+        <div className="flex flex-col gap-2">
+          <div className="flex justify-between text-lg">
+            <span>Together: {view.familyGoal.rewardName}</span>
+            <span className="tabular-nums">
+              {view.familyGoal.progress} / {view.familyGoal.target}
+            </span>
+          </div>
+          <div className="h-3 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary"
+              style={{
+                width: `${Math.min(100, (100 * view.familyGoal.progress) / view.familyGoal.target)}%`,
+              }}
+            />
+          </div>
+        </div>
+      )}
+      {view.siblingBoard && (
+        <ol className="flex flex-col gap-1 rounded-2xl border p-3 text-lg">
+          {view.siblingBoard.map((r) => (
+            <li key={r.childId} className={`flex justify-between ${r.me ? "font-semibold" : ""}`}>
+              <span>{r.nickname}</span>
+              <span className="tabular-nums">{r.progress}%</span>
+            </li>
+          ))}
+        </ol>
       )}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         {view.quests.map((q) => (

@@ -6,7 +6,7 @@ import { parsed, recorded, type CallContext } from "./log";
 
 const Brief = z.strictObject({
   topic: z.string(),
-  proof_kind: z.enum(["photo", "voice", "text"]),
+  proof_kind: z.enum(["photo", "voice", "text", "worksheet"]),
   look_for: z.array(z.strictObject({ phrase: z.string(), count: z.number().int() })),
   answer: z.string(),
   recitation: z.boolean(),
@@ -30,6 +30,7 @@ Return about five Quests the child can do this week at home, each provable with 
 - "photo": the child photographs something they found or made. Fill look_for with short concrete noun phrases (one object each, e.g. "red leaf") and how many must appear.
 - "voice": the child answers out loud.
 - "text": the child types (only for children aged 8 or more).
+- "worksheet": the child does a paper worksheet with several answers and photographs the whole page once (only for children aged 6 or more). Put every expected answer in answer.
 answer is the expected answer or a short rubric. Set recitation true only for Quests about reciting or pronouncing.
 points is 5 to 20 by effort.
 Follow everything the Plan says, including its language and anything it says to avoid.

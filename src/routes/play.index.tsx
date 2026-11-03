@@ -1,8 +1,8 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { getSidebar } from "#/server/fns";
+import { getPlayPicker } from "#/server/fns";
 
 export const Route = createFileRoute("/play/")({
-  loader: () => getSidebar(),
+  loader: () => getPlayPicker(),
   component: PickName,
 });
 
@@ -14,7 +14,7 @@ function PickName() {
         {kids.map((k) => (
           <Link
             key={k.id}
-            to="/play/$childId"
+            to={k.hasPin ? "/play/$childId/pin" : "/play/$childId"}
             params={{ childId: k.id }}
             className="rounded-2xl bg-primary px-6 py-8 text-center text-3xl font-semibold text-primary-foreground"
           >

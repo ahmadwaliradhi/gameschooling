@@ -15,8 +15,8 @@
     },
   ],
   "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "gameschooling" }],
-  // Re-seed the Demo Family every night (03:00 GMT+7).
-  "triggers": { "crons": ["0 20 * * *"] },
+  // Re-seed the Demo Family every night (03:00 GMT+7); Weekly Digests on Monday (08:00 GMT+7).
+  "triggers": { "crons": ["0 20 * * *", "0 1 * * 1"] },
   "vars": {
     "PLANNER_MODEL": "muse-wonder-1.0",
     "PLANNER_FALLBACK_MODEL": "muse-spark-1.3",

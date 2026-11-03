@@ -1,11 +1,7 @@
+import type { PointsEntry } from "./family-rules";
 import type { Outcome } from "./verdict";
 
-export type PointsKind = "earned" | "reward_given" | "overrule";
-export type PointsEntry = { kind: PointsKind; amount: number };
-
-export function balance(entries: readonly { amount: number }[]): number {
-  return entries.reduce((sum, e) => sum + e.amount, 0);
-}
+export { balance, type PointsEntry, type PointsKind } from "./family-rules";
 
 export function pointsForModelVerdict(outcome: Outcome, questPoints: number): PointsEntry[] {
   return outcome === "accepted" ? [{ kind: "earned", amount: questPoints }] : [];

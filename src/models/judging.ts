@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { LookFor, SamFinding, TranscriptTurn } from "#/db/schema";
+import type { AnswerBox, LookFor, SamFinding, TranscriptTurn } from "#/db/schema";
 import type { Message, Part } from "./client";
 import { jsonSchema } from "./json";
 import { parsed, recorded, type CallContext } from "./log";
@@ -20,7 +20,18 @@ export const judgeSchema = jsonSchema("verdict", JudgeOutput);
 export type Evidence =
   | { kind: "photo"; imageUrl: string; findings: SamFinding[] }
   | { kind: "voice"; turns: TranscriptTurn[] }
-  | { kind: "text"; text: string };
+  | { kind: "text"; text: string }
+  // One answer on a worksheet photo: the judge looks only inside its box.
+  | {
+      kind: "worksheet";
+      imageUrl: string;
+      width: number;
+      height: number;
+      box: AnswerBox;
+      question: string;
+      expected: string;
+      reading: string;
+    };
 
 export type JudgeInput = {
   age: number;
@@ -61,6 +72,16 @@ export function judgeMessages(input: JudgeInput, opts: { photoDescription?: stri
               text: `${header}\n\nYou cannot see the photo. Another judge described it as: ${opts.photoDescription}`,
             },
           ];
+  } else if (e.kind === "worksheet") {
+    const b = e.box;
+    const header = `${quest}\n\nProof: one answer on a photo of a worksheet (${e.width}×${e.height} pixels).\nJudge only the child's answer inside the box x1=${b.x1}, y1=${b.y1}, x2=${b.x2}, y2=${b.y2}.\nQuestion: ${e.question}\nRight answer: ${e.expected}\nA reader read the child's answer as: ${e.reading}`;
+    parts =
+      opts.photoDescription === undefined
+        ? [
+            { type: "text", text: header },
+            { type: "image", url: e.imageUrl },
+          ]
+        : [{ type: "text", text: `${header}\n\nYou cannot see the photo; go by the reading.` }];
   } else if (e.kind === "voice") {
     const transcript = e.turns.map((t) => `${t.speaker ?? "Speaker"}: ${t.text}`).join("\n");
     parts = [{ type: "text", text: `${quest}\n\nProof: a voice recording, transcribed:\n${transcript}` }];
@@ -77,6 +98,7 @@ export function summarize(input: JudgeInput): string {
   const e = input.evidence;
   if (e.kind === "photo") return `photo + ${e.findings.length} SAM findings`;
   if (e.kind === "voice") return `transcript, ${e.turns.length} turns`;
+  if (e.kind === "worksheet") return `worksheet answer "${e.question}"`;
   return `typed answer, ${e.text.length} chars`;
 }
 

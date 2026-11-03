@@ -13,13 +13,16 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ParentRouteImport } from './routes/parent'
 import { Route as ApiMakeQuestsRouteImport } from './routes/api/make-quests'
 import { Route as ApiProofRouteImport } from './routes/api/proof'
+import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as ParentIndexRouteImport } from './routes/parent.index'
 import { Route as ParentChildIdRouteImport } from './routes/parent.$childId'
+import { Route as ParentFamilyRouteImport } from './routes/parent.family'
 import { Route as PlayIndexRouteImport } from './routes/play.index'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiFilesSplatRouteImport } from './routes/api/files/$'
 import { Route as PlayChildIdIndexRouteImport } from './routes/play.$childId.index'
 import { Route as PlayChildIdQuestIdRouteImport } from './routes/play.$childId.$questId'
+import { Route as PlayChildIdPinRouteImport } from './routes/play.$childId.pin'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -41,6 +44,11 @@ const ApiProofRoute = ApiProofRouteImport.update({
   path: '/api/proof',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InviteTokenRoute = InviteTokenRouteImport.update({
+  id: '/invite/$token',
+  path: '/invite/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ParentIndexRoute = ParentIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -49,6 +57,11 @@ const ParentIndexRoute = ParentIndexRouteImport.update({
 const ParentChildIdRoute = ParentChildIdRouteImport.update({
   id: '/$childId',
   path: '/$childId',
+  getParentRoute: () => ParentRoute,
+} as any)
+const ParentFamilyRoute = ParentFamilyRouteImport.update({
+  id: '/family',
+  path: '/family',
   getParentRoute: () => ParentRoute,
 } as any)
 const PlayIndexRoute = PlayIndexRouteImport.update({
@@ -76,30 +89,41 @@ const PlayChildIdQuestIdRoute = PlayChildIdQuestIdRouteImport.update({
   path: '/play/$childId/$questId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlayChildIdPinRoute = PlayChildIdPinRouteImport.update({
+  id: '/play/$childId/pin',
+  path: '/play/$childId/pin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/parent': typeof ParentRouteWithChildren
   '/api/make-quests': typeof ApiMakeQuestsRoute
   '/api/proof': typeof ApiProofRoute
+  '/invite/$token': typeof InviteTokenRoute
   '/parent/$childId': typeof ParentChildIdRoute
+  '/parent/family': typeof ParentFamilyRoute
   '/parent/': typeof ParentIndexRoute
   '/play/': typeof PlayIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/files/$': typeof ApiFilesSplatRoute
   '/play/$childId/$questId': typeof PlayChildIdQuestIdRoute
+  '/play/$childId/pin': typeof PlayChildIdPinRoute
   '/play/$childId/': typeof PlayChildIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api/make-quests': typeof ApiMakeQuestsRoute
   '/api/proof': typeof ApiProofRoute
+  '/invite/$token': typeof InviteTokenRoute
   '/parent/$childId': typeof ParentChildIdRoute
+  '/parent/family': typeof ParentFamilyRoute
   '/parent': typeof ParentIndexRoute
   '/play': typeof PlayIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/files/$': typeof ApiFilesSplatRoute
   '/play/$childId/$questId': typeof PlayChildIdQuestIdRoute
+  '/play/$childId/pin': typeof PlayChildIdPinRoute
   '/play/$childId': typeof PlayChildIdIndexRoute
 }
 export interface FileRoutesById {
@@ -108,12 +132,15 @@ export interface FileRoutesById {
   '/parent': typeof ParentRouteWithChildren
   '/api/make-quests': typeof ApiMakeQuestsRoute
   '/api/proof': typeof ApiProofRoute
+  '/invite/$token': typeof InviteTokenRoute
   '/parent/$childId': typeof ParentChildIdRoute
+  '/parent/family': typeof ParentFamilyRoute
   '/parent/': typeof ParentIndexRoute
   '/play/': typeof PlayIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/files/$': typeof ApiFilesSplatRoute
   '/play/$childId/$questId': typeof PlayChildIdQuestIdRoute
+  '/play/$childId/pin': typeof PlayChildIdPinRoute
   '/play/$childId/': typeof PlayChildIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -123,24 +150,30 @@ export interface FileRouteTypes {
     | '/parent'
     | '/api/make-quests'
     | '/api/proof'
+    | '/invite/$token'
     | '/parent/$childId'
+    | '/parent/family'
     | '/parent/'
     | '/play/'
     | '/api/auth/$'
     | '/api/files/$'
     | '/play/$childId/$questId'
+    | '/play/$childId/pin'
     | '/play/$childId/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/api/make-quests'
     | '/api/proof'
+    | '/invite/$token'
     | '/parent/$childId'
+    | '/parent/family'
     | '/parent'
     | '/play'
     | '/api/auth/$'
     | '/api/files/$'
     | '/play/$childId/$questId'
+    | '/play/$childId/pin'
     | '/play/$childId'
   id:
     | '__root__'
@@ -148,12 +181,15 @@ export interface FileRouteTypes {
     | '/parent'
     | '/api/make-quests'
     | '/api/proof'
+    | '/invite/$token'
     | '/parent/$childId'
+    | '/parent/family'
     | '/parent/'
     | '/play/'
     | '/api/auth/$'
     | '/api/files/$'
     | '/play/$childId/$questId'
+    | '/play/$childId/pin'
     | '/play/$childId/'
   fileRoutesById: FileRoutesById
 }
@@ -162,10 +198,12 @@ export interface RootRouteChildren {
   ParentRoute: typeof ParentRouteWithChildren
   ApiMakeQuestsRoute: typeof ApiMakeQuestsRoute
   ApiProofRoute: typeof ApiProofRoute
+  InviteTokenRoute: typeof InviteTokenRoute
   PlayIndexRoute: typeof PlayIndexRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiFilesSplatRoute: typeof ApiFilesSplatRoute
   PlayChildIdQuestIdRoute: typeof PlayChildIdQuestIdRoute
+  PlayChildIdPinRoute: typeof PlayChildIdPinRoute
   PlayChildIdIndexRoute: typeof PlayChildIdIndexRoute
 }
 
@@ -199,6 +237,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiProofRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/invite/$token': {
+      id: '/invite/$token'
+      path: '/invite/$token'
+      fullPath: '/invite/$token'
+      preLoaderRoute: typeof InviteTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/parent/': {
       id: '/parent/'
       path: '/'
@@ -211,6 +256,13 @@ declare module '@tanstack/react-router' {
       path: '/$childId'
       fullPath: '/parent/$childId'
       preLoaderRoute: typeof ParentChildIdRouteImport
+      parentRoute: typeof ParentRoute
+    }
+    '/parent/family': {
+      id: '/parent/family'
+      path: '/family'
+      fullPath: '/parent/family'
+      preLoaderRoute: typeof ParentFamilyRouteImport
       parentRoute: typeof ParentRoute
     }
     '/play/': {
@@ -248,16 +300,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlayChildIdQuestIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/play/$childId/pin': {
+      id: '/play/$childId/pin'
+      path: '/play/$childId/pin'
+      fullPath: '/play/$childId/pin'
+      preLoaderRoute: typeof PlayChildIdPinRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 interface ParentRouteChildren {
   ParentChildIdRoute: typeof ParentChildIdRoute
+  ParentFamilyRoute: typeof ParentFamilyRoute
   ParentIndexRoute: typeof ParentIndexRoute
 }
 
 const ParentRouteChildren: ParentRouteChildren = {
   ParentChildIdRoute: ParentChildIdRoute,
+  ParentFamilyRoute: ParentFamilyRoute,
   ParentIndexRoute: ParentIndexRoute,
 }
 
@@ -269,10 +330,12 @@ const rootRouteChildren: RootRouteChildren = {
   ParentRoute: ParentRouteWithChildren,
   ApiMakeQuestsRoute: ApiMakeQuestsRoute,
   ApiProofRoute: ApiProofRoute,
+  InviteTokenRoute: InviteTokenRoute,
   PlayIndexRoute: PlayIndexRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiFilesSplatRoute: ApiFilesSplatRoute,
   PlayChildIdQuestIdRoute: PlayChildIdQuestIdRoute,
+  PlayChildIdPinRoute: PlayChildIdPinRoute,
   PlayChildIdIndexRoute: PlayChildIdIndexRoute,
 }
 export const routeTree = rootRouteImport

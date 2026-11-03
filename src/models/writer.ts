@@ -24,7 +24,8 @@ Child safety: nothing scary, violent, unsafe to do without an adult, or about st
 
 export async function writeQuest(
   ctx: CallContext,
-  input: { brief: Brief; planText: string; age: number },
+  // `feedback`: why the Guardian turned down the last draft, for the one rewrite.
+  input: { brief: Brief; planText: string; age: number; feedback?: string },
 ): Promise<QuestDraft> {
   return recorded(
     ctx,
@@ -32,7 +33,7 @@ export async function writeQuest(
       agent: "writer",
       model: MODELS.spark,
       endpoint: "meta /v1/chat/completions",
-      inputSummary: `brief "${input.brief.topic}" (${input.brief.proof_kind}), age ${input.age}`,
+      inputSummary: `${input.feedback ? "rewrite of " : ""}brief "${input.brief.topic}" (${input.brief.proof_kind}), age ${input.age}`,
     },
     async () => {
       const res = await ctx.client.chat({
@@ -44,7 +45,11 @@ export async function writeQuest(
           { role: "system", content: SYSTEM },
           {
             role: "user",
-            content: `Child's age: ${input.age}\n\nPlan:\n${input.planText}\n\nBrief:\n${JSON.stringify(input.brief)}`,
+            content: `Child's age: ${input.age}\n\nPlan:\n${input.planText}\n\nBrief:\n${JSON.stringify(input.brief)}${
+              input.feedback
+                ? `\n\nA safety check turned down your last draft: ${input.feedback}\nWrite a new Quest that fixes this.`
+                : ""
+            }`,
           },
         ],
       });
