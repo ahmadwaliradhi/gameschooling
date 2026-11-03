@@ -1,0 +1,147 @@
+import { describe, expect, it } from "vitest";
+import type { Message } from "#/models/client";
+import { deps, familyWithChild, fakeClient, json, memoryBlobs, testDb, usage } from "#/test/harness";
+import { makeQuests } from "./make-quests";
+import { modelLog, parentView } from "./views";
+
+const brief = (topic: string, proof_kind: "photo" | "voice" | "text" = "voice") => ({
+  topic,
+  proof_kind,
+  look_for: proof_kind === "photo" ? [{ phrase: "leaf", count: 3 }] : [],
+  answer: `${topic} answer`,
+  recitation: false,
+  points: 10,
+});
+
+const plannerOutput = {
+  quests: [brief("count leaves", "photo"), brief("say numbers")],
+  rewards: [
+    { name: "ice cream", price: 100 },
+    { name: "park", price: 40 },
+  ],
+};
+
+function userText(messages: Message[]) {
+  const user = messages.find((m) => m.role === "user")!;
+  return typeof user.content === "string" ? user.content : JSON.stringify(user.content);
+}
+
+const writer = (messages: Message[]) => {
+  const topic = /"topic":"([^"]+)"/.exec(userText(messages))![1];
+  return json({
+    title: `Quest: ${topic}`,
+    read_aloud: `Let's ${topic}!`,
+    cover_prompt: `cover for ${topic}`,
+    look_for: topic === "count leaves" ? [{ phrase: "leaf", count: 3 }] : [],
+    answer: `${topic} answer`,
+  });
+};
+
+async function drain(lines: AsyncIterable<string>) {
+  const out: string[] = [];
+  for await (const line of lines) out.push(line);
+  return out;
+}
+
+describe("Make quests", () => {
+  it("turns the Plan into Quests with covers and picks up the Plan's Rewards", async () => {
+    const db = await testDb();
+    const { familyId, childId } = await familyWithChild(db);
+    const blobs = memoryBlobs();
+    const client = fakeClient({
+      respond: async () => json(plannerOutput, "muse-wonder-1.0"),
+      chat: async ({ messages }) => writer(messages),
+      image: async () => ({ bytes: new Uint8Array([1, 2, 3]), contentType: "image/webp" }),
+    });
+
+    const lines = await drain(makeQuests(deps(db, client, blobs), { familyId, childId }));
+
+    const view = await parentView(db, familyId, childId);
+    expect(view.quests.map((q) => q.title).sort()).toEqual(["Quest: count leaves", "Quest: say numbers"]);
+    expect(view.quests.every((q) => q.coverKey && blobs.keys().includes(q.coverKey))).toBe(true);
+    expect(view.quests.find((q) => q.title === "Quest: count leaves")?.proofKind).toBe("photo");
+    expect(view.rewards.map((r) => [r.name, r.price])).toEqual([
+      ["park", 40],
+      ["ice cream", 100],
+    ]);
+    expect(lines.length).toBeGreaterThan(2);
+    expect(lines.at(-1)).toMatch(/2 Quests/);
+  });
+
+  it("keeps the Quests that finished when a writer or an image fails, and logs the failures", async () => {
+    const db = await testDb();
+    const { familyId, childId } = await familyWithChild(db);
+    const client = fakeClient({
+      respond: async () =>
+        json(
+          { ...plannerOutput, quests: [brief("count leaves", "photo"), brief("say numbers"), brief("sing")] },
+          "muse-wonder-1.0",
+        ),
+      chat: async ({ messages }) => {
+        if (userText(messages).includes('"topic":"sing"')) throw new Error("writer timed out");
+        return writer(messages);
+      },
+      image: async ({ prompt }) => {
+        if (prompt.includes("say numbers")) throw new Error("content_policy_violation");
+        return { bytes: new Uint8Array([9]), contentType: "image/webp" };
+      },
+    });
+
+    await drain(makeQuests(deps(db, client), { familyId, childId }));
+
+    const view = await parentView(db, familyId, childId);
+    expect(view.quests.map((q) => q.title).sort()).toEqual(["Quest: count leaves", "Quest: say numbers"]);
+    const uncovered = view.quests.find((q) => q.title === "Quest: say numbers")!;
+    expect(uncovered.coverKey).toBeNull();
+    expect(uncovered.coverColor).toMatch(/^#/);
+
+    const log = await modelLog(db, familyId, { questId: uncovered.id });
+    expect(log.map((c) => [c.agent, c.status])).toEqual([
+      ["planner", "ok"],
+      ["writer", "ok"],
+      ["illustrator", "error"],
+    ]);
+    expect(log.at(-1)?.error).toContain("content_policy_violation");
+  });
+
+  it("falls back to Muse Spark when Muse Wonder fails, and the log shows the model actually used", async () => {
+    const db = await testDb();
+    const { familyId, childId } = await familyWithChild(db);
+    const client = fakeClient({
+      respond: async ({ model }) => {
+        if (model === "muse-wonder-1.0") throw new Error("503 service_overloaded");
+        return json({ ...plannerOutput, quests: [brief("say numbers")] }, "muse-spark-1.3");
+      },
+      chat: async ({ messages }) => writer(messages),
+      image: async () => ({ bytes: new Uint8Array([1]), contentType: "image/webp" }),
+    });
+
+    await drain(makeQuests(deps(db, client), { familyId, childId }));
+
+    const [quest] = (await parentView(db, familyId, childId)).quests;
+    const planners = (await modelLog(db, familyId, { questId: quest!.id })).filter(
+      (c) => c.agent === "planner",
+    );
+    expect(planners.map((c) => [c.model, c.status])).toEqual([
+      ["muse-wonder-1.0", "error"],
+      ["muse-spark-1.3", "ok"],
+    ]);
+    expect(planners[1]!.costUsd).toBeCloseTo((100 * 1.25 + 50 * 4.25) / 1e6);
+    expect(usage.inputTokens).toBe(100);
+  });
+
+  it("never asks a 6-year-old to type", async () => {
+    const db = await testDb();
+    const { familyId, childId } = await familyWithChild(db);
+    const client = fakeClient({
+      respond: async () =>
+        json({ ...plannerOutput, quests: [brief("spell cat", "text")] }, "muse-wonder-1.0"),
+      chat: async ({ messages }) => writer(messages),
+      image: async () => ({ bytes: new Uint8Array([1]), contentType: "image/webp" }),
+    });
+
+    await drain(makeQuests(deps(db, client), { familyId, childId }));
+
+    expect((await parentView(db, familyId, childId)).quests.map((q) => q.proofKind)).toEqual(["voice"]);
+  });
+});
