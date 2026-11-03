@@ -31,7 +31,7 @@ const parentOrRedirect = () =>
   });
 
 // The shared Demo Family stays the same for every judge: no PINs, invites or Parent changes.
-function notDemo(familyId: string) {
+function refuseInDemo(familyId: string) {
   if (familyId === DEMO_FAMILY_ID) throw new Error("Not available in the Demo Family");
 }
 
@@ -86,7 +86,7 @@ export const setPinFn = createServerFn({ method: "POST" })
   .validator(z.object({ childId: z.string(), pin: z.string().nullable() }))
   .handler(async ({ data }) => {
     const { familyId } = await parentOrRedirect();
-    notDemo(familyId);
+    refuseInDemo(familyId);
     await setPin(db(), familyId, data.childId, data.pin);
   });
 
@@ -254,7 +254,7 @@ export const giveFamilyGoalFn = createServerFn({ method: "POST" }).handler(async
 
 export const createInviteFn = createServerFn({ method: "POST" }).handler(async () => {
   const { familyId, parentId } = await parentOrRedirect();
-  notDemo(familyId);
+  refuseInDemo(familyId);
   return createInvite(db(), { familyId, parentId });
 });
 
@@ -262,7 +262,7 @@ export const removeParentFn = createServerFn({ method: "POST" })
   .validator(z.object({ parentId: z.string() }))
   .handler(async ({ data }) => {
     const { familyId } = await parentOrRedirect();
-    notDemo(familyId);
+    refuseInDemo(familyId);
     await removeParent(db(), { familyId, parentId: data.parentId });
   });
 

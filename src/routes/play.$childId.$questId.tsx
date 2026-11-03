@@ -86,9 +86,7 @@ function QuestPlay() {
                   {o ? (
                     <>
                       <span>{o.multiplier}×</span>
-                      <span className="text-sm">
-                        win +{o.bonus} or lose +{o.bonus}
-                      </span>
+                      <span className="text-sm">+{o.bonus} if right, none if not</span>
                     </>
                   ) : (
                     <span>No thanks</span>

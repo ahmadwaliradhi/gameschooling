@@ -1,4 +1,4 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,7 +45,13 @@ function Digests(props: { family: Family }) {
               <span className="font-medium">{e.nickname}</span>
               <p>{e.learned}</p>
               {e.struggled && <p className="text-muted-foreground">{e.struggled}</p>}
-              <p className="text-xs text-muted-foreground">Based on {e.verdictIds.length} Verdicts</p>
+              <Link
+                to="/parent/$childId"
+                params={{ childId: e.childId }}
+                className="text-xs text-muted-foreground underline"
+              >
+                Based on {e.verdictIds.length} Verdicts
+              </Link>
             </div>
           ))}
           <details>

@@ -10,6 +10,7 @@ Use these words in code, tests, issues and UI. Capitalised in prose.
 - **Make quests**: one press that turns a Plan into about five Quests (planner, writer, illustrator).
 - **Quest**: one task for a Child, read aloud, with a cover, a fixed number of Points and one Proof kind.
 - **Guardian check**: a separate Muse Spark call that checks each Quest's text and cover prompt before a Child sees it. Fails twice: the Quest is dropped and shown to the Parent with the reason.
+- **Answer**: one question's reply on a worksheet Proof; each gets its own Verdict.
 - **Proof**: what the Child submits for a Quest: a `photo`, a `voice` recording, (age 8 and up) `text`, or (age 6 and up) a `worksheet`: one photo of a paper sheet, with a Verdict per answer.
 - **Verdict**: the outcome of checking a Proof: `accepted`, `not_yet`, or `needs_parent`. A Parent can change any Verdict.
 - **Overrule**: a Parent changing a decided Verdict; it writes an `overrule` Points entry so the balance follows.
@@ -24,4 +25,4 @@ Use these words in code, tests, issues and UI. Capitalised in prose.
 - **Model log**: one `model_calls` row per model call: agent, actual model, input summary, output, tokens, cost, latency, error.
 - **Demo Family**: the seeded Family behind the Demo button, rebuilt nightly.
 
-Avoid: lesson, task, exercise (say Quest); submission, answer (say Proof); grade, score (say Verdict); XP, coins (say Points); user (say Parent or Child).
+Avoid: lesson, task, exercise (say Quest); submission (say Proof); grade, score (say Verdict); XP, coins (say Points); user (say Parent or Child).
