@@ -10,7 +10,7 @@
     {
       "binding": "DB",
       "database_name": "gameschooling",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "0d1c7200-5db1-4b80-acee-f249b8e33c83",
       "migrations_dir": "migrations",
     },
   ],

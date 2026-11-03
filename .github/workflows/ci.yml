@@ -1,0 +1,98 @@
+name: CI/CD
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm build
+
+  # Upload a preview version (not live) and post its URL. Preview versions share
+  # production bindings (D1, R2), so they read and write real data. Needs the
+  # Worker to exist (first main deploy), so failures here don't block the PR.
+  preview:
+    needs: check
+    continue-on-error: true
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Upload preview version
+        id: upload
+        run: |
+          pnpm exec wrangler versions upload --preview-alias "pr-${{ github.event.pull_request.number }}" \
+            --message "PR #${{ github.event.pull_request.number }} @ ${GITHUB_SHA::7}" | tee upload.log
+          url=$(grep -oE 'https://pr-[^ ]+\.workers\.dev' upload.log | head -1)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Comment preview URL
+        if: steps.upload.outputs.url != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} \
+            --edit-last --create-if-none \
+            --body "Preview: ${{ steps.upload.outputs.url }} (commit ${GITHUB_SHA::7})"
+
+  deploy:
+    needs: check
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://gameschooling.ahmadwaliradhi.workers.dev
+    concurrency:
+      group: production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Apply D1 migrations
+        run: pnpm exec wrangler d1 migrations apply gameschooling --remote
+      - name: Deploy Worker
+        run: pnpm exec wrangler deploy
