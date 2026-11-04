@@ -4,14 +4,21 @@ import { children, families, parents, plans, quests, user } from "#/db/schema";
 import { NotFoundError } from "./deps";
 
 // A Parent signing in for the first time gets a Family.
+// A first page load runs several loaders at once, so two calls can race here:
+// the loser's insert is skipped and it drops its empty Family and uses the winner's.
 export async function ensureFamily(db: Db, userId: string): Promise<{ familyId: string; parentId: string }> {
   const existing = await db.query.parents.findFirst({ where: eq(parents.userId, userId) });
   if (existing) return { familyId: existing.familyId, parentId: existing.id };
   const familyId = crypto.randomUUID();
-  const parentId = crypto.randomUUID();
   await db.insert(families).values({ id: familyId });
-  await db.insert(parents).values({ id: parentId, familyId, userId });
-  return { familyId, parentId };
+  await db
+    .insert(parents)
+    .values({ id: crypto.randomUUID(), familyId, userId })
+    .onConflictDoNothing({ target: parents.userId });
+  const parent = await db.query.parents.findFirst({ where: eq(parents.userId, userId) });
+  if (!parent) throw new Error("Parent row missing after insert");
+  if (parent.familyId !== familyId) await db.delete(families).where(eq(families.id, familyId));
+  return { familyId: parent.familyId, parentId: parent.id };
 }
 
 // Each Parent's display name by Parent id, to show who decided what.

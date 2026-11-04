@@ -11,6 +11,7 @@ export const Route = createFileRoute("/parent-pin")({
     if (!pad) throw redirect({ to: "/parent" });
     return pad;
   },
+  head: () => ({ meta: [{ title: "Parent PIN · GameSchooling" }] }),
   component: ParentPinPad,
 });
 
@@ -22,7 +23,7 @@ function ParentPinPad() {
       title="Parent PIN"
       pausedUntil={pad.pausedUntil}
       enter={(pin) => enterParentPinFn({ data: { pin } })}
-      onUnlocked={() => navigate({ to: "/parent" })}
+      onUnlocked={() => navigate({ to: "/parent", replace: true })}
     >
       <div className="flex flex-col items-center gap-2">
         <Link to="/play" className="text-lg text-muted-foreground">

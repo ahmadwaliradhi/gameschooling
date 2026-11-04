@@ -176,4 +176,45 @@ describe("Worksheet Proof", () => {
 
     expect(result.outcome).toBe("needs_parent");
   });
+  it("pays what the answers add up to when two Parents decide different answers at once", async () => {
+    // A rejects a right answer and is slow to write its Points; B accepts the wrong one meanwhile.
+    // A read the answers before B changed one, so A's total is stale by the time it writes.
+    let hold: { gate: Promise<void>; reached: () => void } | null = null;
+    const db = await testDb({
+      beforeStatement: async (statement) => {
+        if (hold && /^insert into "points_log"/i.test(statement)) {
+          const { gate, reached } = hold;
+          hold = null;
+          reached();
+          await gate;
+        }
+      },
+    });
+    const family = await familyWithChild(db, { nickname: "Ali", birthYear: new Date().getFullYear() - 9 });
+    const { familyId, childId, parentId } = family;
+    const questId = await questFor(db, familyId, childId, {
+      proofKind: "worksheet",
+      lookFor: [],
+      answer: "5, 8, 7",
+      points: 12,
+    });
+    await checkProof(deps(db, worksheetClient()), { familyId, questId, proof: sheet });
+    const [right, , wrong] = (await parentView(db, familyId, childId)).quests[0]!.verdict!.answers;
+    let release = () => {};
+    const reached = new Promise<void>((r) => {
+      hold = { gate: new Promise((g) => (release = g)), reached: r };
+    });
+
+    const a = decideAnswer(db, { familyId, parentId, answerId: right!.id, choice: "reject" });
+    await reached;
+    await decideAnswer(db, { familyId, parentId, answerId: wrong!.id, choice: "accept" });
+    release();
+    await a;
+
+    const view = await parentView(db, familyId, childId);
+    const verdict = view.quests[0]!.verdict!;
+    expect(verdict.answers.map((x) => x.outcome)).toEqual(["not_yet", "accepted", "accepted"]);
+    expect(view.points).toBe(8);
+    expect(verdict.outcome).toBe("accepted");
+  });
 });

@@ -9,26 +9,35 @@ import { callContext, type Deps } from "./deps";
 import { getChild, getPlanText } from "./family";
 import { questStates } from "./views";
 
-// Muse Image allows 150 requests a minute.
-export const COVER_SPACING_MS = 500;
-
 const COVER_COLORS = ["#F6D365", "#A8E6CF", "#FFD3B6", "#B5D8FF", "#E2C2FF", "#FFAAA5"];
 
-async function* inCompletionOrder<T>(promises: Promise<T>[]): AsyncGenerator<PromiseSettledResult<T>> {
-  const pending = new Map(
-    promises.map((p, i) => [
-      i,
-      p.then(
-        (value) => ({ i, result: { status: "fulfilled", value } as PromiseSettledResult<T> }),
-        (reason) => ({ i, result: { status: "rejected", reason } as PromiseSettledResult<T> }),
-      ),
-    ]),
-  );
-  while (pending.size) {
-    const { i, result } = await Promise.race(pending.values());
-    pending.delete(i);
-    yield result;
+// Runs the tasks at once and yields the lines they report, in the order they report them.
+async function* reported(
+  tasks: ((report: (line: string) => void) => Promise<void>)[],
+): AsyncGenerator<string> {
+  const queue: string[] = [];
+  let wake: (() => void) | undefined;
+  const nudge = () => {
+    wake?.();
+    wake = undefined;
+  };
+  let running = true;
+  const all = Promise.all(
+    tasks.map((task) =>
+      task((line) => {
+        queue.push(line);
+        nudge();
+      }),
+    ),
+  ).finally(() => {
+    running = false;
+    nudge();
+  });
+  while (running || queue.length) {
+    if (queue.length) yield queue.shift()!;
+    else await new Promise<void>((resolve) => (wake = resolve));
   }
+  await all;
 }
 
 // One Make quests press. Yields progress lines; Quests that finish are kept even if later steps fail.
@@ -66,8 +75,9 @@ export async function* makeQuests(
       { planText, age, recent },
       { primary: deps.config.plannerModel, fallback: deps.config.plannerFallback },
     );
-  } catch {
-    yield "Could not plan Quests";
+  } catch (e) {
+    console.error("make-quests: plan failed", e);
+    yield "Could not plan Quests. Try again in a minute.";
     return;
   }
 
@@ -80,59 +90,59 @@ export async function* makeQuests(
   yield `Planned ${planned.quests.length} Quests`;
 
   const briefs = planned.quests.map((brief) => ({ brief, questId: crypto.randomUUID() }));
-  const written: { questId: string; title: string; coverPrompt: string }[] = [];
-  const drafts = briefs.map(async ({ brief, questId }, i) => {
+  let made = 0;
+  // Each Quest runs on its own: written, checked, saved, then given a cover without waiting for the others.
+  const tasks = briefs.map(({ brief, questId }, i) => async (report: (line: string) => void) => {
     const ctx = callContext(deps, { familyId, runId, questId });
-    // Written, then checked by the Guardian; one rewrite, then the Quest is dropped for the Parent.
-    let draft = await writeQuest(ctx, { brief, planText, age });
-    let check = await guard(ctx, draft, { age, planText });
-    if (!check.safe) {
-      draft = await writeQuest(ctx, { brief, planText, age, feedback: check.reason });
-      check = await guard(ctx, draft, { age, planText });
-    }
-    await saveQuest(deps, {
-      familyId,
-      childId,
-      questId,
-      brief,
-      draft,
-      age,
-      color: COVER_COLORS[i % COVER_COLORS.length],
-      droppedReason: check.safe ? null : check.reason,
-    });
-    return { questId, title: draft.title, coverPrompt: draft.cover_prompt, safe: check.safe };
-  });
-  for await (const result of inCompletionOrder(drafts)) {
-    if (result.status === "rejected") {
-      yield "Could not write one Quest";
-    } else if (result.value.safe) {
-      written.push(result.value);
-      yield `Wrote "${result.value.title}"`;
-    } else {
-      yield `Dropped "${result.value.title}"`;
-    }
-  }
-
-  for (const [i, quest] of written.entries()) {
-    if (i > 0) await deps.pause(COVER_SPACING_MS);
+    let draft: QuestDraft;
+    let check: Awaited<ReturnType<typeof guard>>;
     try {
-      const image = await drawCover(
-        callContext(deps, { familyId, runId, questId: quest.questId }),
-        quest.coverPrompt,
-      );
-      const key = `covers/${familyId}/${quest.questId}.webp`;
+      // Written, then checked by the Guardian; one rewrite, then the Quest is dropped for the Parent.
+      draft = await writeQuest(ctx, { brief, planText, age });
+      check = await guard(ctx, draft, { age, planText });
+      if (!check.safe) {
+        draft = await writeQuest(ctx, { brief, planText, age, feedback: check.reason });
+        check = await guard(ctx, draft, { age, planText });
+      }
+      await saveQuest(deps, {
+        familyId,
+        childId,
+        questId,
+        brief,
+        draft,
+        age,
+        color: COVER_COLORS[i % COVER_COLORS.length],
+        droppedReason: check.safe ? null : check.reason,
+      });
+    } catch (e) {
+      console.error("make-quests: write failed", e);
+      report("Could not write one Quest");
+      return;
+    }
+    if (!check.safe) {
+      report(`Dropped "${draft.title}"`);
+      return;
+    }
+    made++;
+    report(`Wrote "${draft.title}"`);
+
+    // Muse Image allows 150 requests a minute, so a run's covers (about five) can all draw at once.
+    try {
+      const image = await drawCover(ctx, draft.cover_prompt);
+      const key = `covers/${familyId}/${questId}.webp`;
       await deps.blobs.put(key, image.bytes, image.contentType);
       await db
         .update(quests)
         .set({ coverKey: key })
-        .where(and(eq(quests.id, quest.questId), eq(quests.familyId, familyId)));
-      yield `Drew a cover for "${quest.title}"`;
+        .where(and(eq(quests.id, questId), eq(quests.familyId, familyId)));
+      report(`Drew a cover for "${draft.title}"`);
     } catch {
-      yield `No cover for "${quest.title}"`;
+      report(`No cover for "${draft.title}"`);
     }
-  }
+  });
+  yield* reported(tasks);
 
-  yield `Made ${written.length} Quests`;
+  yield made === 0 ? "Could not make any Quests. Try again." : `Made ${made} Quests`;
 }
 
 async function guard(

@@ -248,6 +248,45 @@ describe("Make quests", () => {
     expect(lines.at(-1)).toMatch(/1 Quests/);
   });
 
+  it("draws each cover as soon as its Quest passes the check, alongside the other covers", async () => {
+    const db = await testDb();
+    const { familyId, childId } = await familyWithChild(db);
+    // Resolves true once the promise settles, false if it is still waiting after a short while.
+    const within = (p: Promise<unknown>) =>
+      Promise.race([p.then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), 300))]);
+    let fastCoverStarted!: () => void;
+    let slowCoverStarted!: () => void;
+    const fastCover = new Promise<void>((r) => (fastCoverStarted = r));
+    const slowCover = new Promise<void>((r) => (slowCoverStarted = r));
+    let slowWriterSawFastCover = false;
+    let fastCoverSawSlowCover = false;
+    const client = fakeClient({
+      respond: async () =>
+        json({ ...plannerOutput, quests: [brief("fast"), brief("slow")] }, "muse-wonder-1.0"),
+      chat: chatWith(async ({ messages }) => {
+        // The slow Quest is still being written when the fast Quest's cover should start.
+        if (userText(messages).includes('"topic":"slow"')) slowWriterSawFastCover = await within(fastCover);
+        return writer(messages);
+      }),
+      image: async ({ prompt }) => {
+        if (prompt.includes("slow")) slowCoverStarted();
+        else {
+          fastCoverStarted();
+          // The fast cover is still drawing when the slow one should start.
+          fastCoverSawSlowCover = await within(slowCover);
+        }
+        return { bytes: new Uint8Array([1]), contentType: "image/webp" };
+      },
+    });
+
+    const lines = await drain(makeQuests(deps(db, client), { familyId, childId }));
+
+    expect(slowWriterSawFastCover).toBe(true);
+    expect(fastCoverSawSlowCover).toBe(true);
+    expect((await parentView(db, familyId, childId)).quests.every((q) => q.coverKey)).toBe(true);
+    expect(lines.at(-1)).toMatch(/2 Quests/);
+  });
+
   it("drops a Quest when the Guardian cannot be reached, since nothing unchecked reaches a Child", async () => {
     const db = await testDb();
     const { familyId, childId } = await familyWithChild(db);

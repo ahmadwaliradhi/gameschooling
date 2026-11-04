@@ -12,6 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ParentRouteImport } from './routes/parent'
 import { Route as ParentPinRouteImport } from './routes/parent-pin'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as ApiMakeQuestsRouteImport } from './routes/api/make-quests'
 import { Route as ApiProofRouteImport } from './routes/api/proof'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
@@ -38,6 +40,16 @@ const ParentRoute = ParentRouteImport.update({
 const ParentPinRoute = ParentPinRouteImport.update({
   id: '/parent-pin',
   path: '/parent-pin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiMakeQuestsRoute = ApiMakeQuestsRouteImport.update({
@@ -105,6 +117,8 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/parent': typeof ParentRouteWithChildren
   '/parent-pin': typeof ParentPinRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/api/make-quests': typeof ApiMakeQuestsRoute
   '/api/proof': typeof ApiProofRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -121,6 +135,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/parent-pin': typeof ParentPinRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/api/make-quests': typeof ApiMakeQuestsRoute
   '/api/proof': typeof ApiProofRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -139,6 +155,8 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/parent': typeof ParentRouteWithChildren
   '/parent-pin': typeof ParentPinRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/api/make-quests': typeof ApiMakeQuestsRoute
   '/api/proof': typeof ApiProofRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -158,6 +176,8 @@ export interface FileRouteTypes {
     | '/'
     | '/parent'
     | '/parent-pin'
+    | '/privacy'
+    | '/terms'
     | '/api/make-quests'
     | '/api/proof'
     | '/invite/$token'
@@ -174,6 +194,8 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/parent-pin'
+    | '/privacy'
+    | '/terms'
     | '/api/make-quests'
     | '/api/proof'
     | '/invite/$token'
@@ -191,6 +213,8 @@ export interface FileRouteTypes {
     | '/'
     | '/parent'
     | '/parent-pin'
+    | '/privacy'
+    | '/terms'
     | '/api/make-quests'
     | '/api/proof'
     | '/invite/$token'
@@ -209,6 +233,8 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ParentRoute: typeof ParentRouteWithChildren
   ParentPinRoute: typeof ParentPinRoute
+  PrivacyRoute: typeof PrivacyRoute
+  TermsRoute: typeof TermsRoute
   ApiMakeQuestsRoute: typeof ApiMakeQuestsRoute
   ApiProofRoute: typeof ApiProofRoute
   InviteTokenRoute: typeof InviteTokenRoute
@@ -241,6 +267,20 @@ declare module '@tanstack/react-router' {
       path: '/parent-pin'
       fullPath: '/parent-pin'
       preLoaderRoute: typeof ParentPinRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/make-quests': {
@@ -349,6 +389,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ParentRoute: ParentRouteWithChildren,
   ParentPinRoute: ParentPinRoute,
+  PrivacyRoute: PrivacyRoute,
+  TermsRoute: TermsRoute,
   ApiMakeQuestsRoute: ApiMakeQuestsRoute,
   ApiProofRoute: ApiProofRoute,
   InviteTokenRoute: InviteTokenRoute,

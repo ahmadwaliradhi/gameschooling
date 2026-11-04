@@ -31,11 +31,16 @@ export function ProofView(props: {
     else img.addEventListener("load", paint, { once: true });
   }, [props.sam]);
 
-  if (proof.kind === "photo" && proof.photoKey) {
+  if ((proof.kind === "photo" || proof.kind === "worksheet") && proof.photoKey) {
     return (
       <div className="flex flex-col gap-2">
         <div className="relative w-fit max-w-full">
-          <img ref={image} src={fileUrl(proof.photoKey)} alt="Proof" className="max-h-96 rounded-md" />
+          <img
+            ref={image}
+            src={fileUrl(proof.photoKey)}
+            alt={proof.kind === "worksheet" ? "Worksheet" : "Proof"}
+            className="max-h-96 rounded-md"
+          />
           <canvas ref={canvas} className="pointer-events-none absolute inset-0 h-full w-full" />
         </div>
         {props.sam && (

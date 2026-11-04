@@ -6,7 +6,11 @@ import type { Outcome } from "./verdict";
 export type PointsKind = "earned" | "reward_given" | "overrule" | "stake_won" | "stake_lost";
 export type PointsEntry = { kind: PointsKind; amount: number };
 
-const isStake = (kind: PointsKind) => kind === "stake_won" || kind === "stake_lost";
+export const STAKE_KINDS: readonly PointsKind[] = ["stake_won", "stake_lost"];
+// Entries a Parent's decision moves for learning, Stakes apart.
+export const LEARNING_KINDS: readonly PointsKind[] = ["earned", "overrule"];
+
+const isStake = (kind: PointsKind) => STAKE_KINDS.includes(kind);
 
 // Stakes only move bonus Points: their net never counts below zero, so a lost Stake can never take
 // Points earned for learning.

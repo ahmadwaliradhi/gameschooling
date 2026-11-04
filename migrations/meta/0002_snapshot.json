@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2efa391c-c3a8-4bdb-a835-3926b826936a",
+  "id": "63070294-2fe5-44ec-8be3-2c36dc7e76f2",
   "prevId": "9a6c2cf5-742c-4b33-b877-81145c2bac6d",
   "tables": {
     "account": {
@@ -541,28 +541,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": true
-        },
-        "parent_pin_hash": {
-          "name": "parent_pin_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "parent_pin_failures": {
-          "name": "parent_pin_failures",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "parent_pin_paused_until": {
-          "name": "parent_pin_paused_until",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
@@ -1751,6 +1729,13 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "revision": {
+          "name": "revision",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "created_at": {

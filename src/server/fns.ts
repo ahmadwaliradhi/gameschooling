@@ -1,35 +1,30 @@
 import { createServerFn } from "@tanstack/react-start";
 import { redirect } from "@tanstack/react-router";
 import { z } from "zod";
-import { decideAnswer, decideAsParent, giveRewardTo } from "#/services/check-proof";
+import { decideAnswer, decideAsParent } from "#/services/check-proof";
+import { giveRewardTo } from "#/services/rewards";
 import { recordConsequence } from "#/services/consequences";
 import { DEMO_FAMILY_ID, DEMO_USER_ID } from "#/services/demo";
 import { digestsFor } from "#/services/digest";
-import {
-  addChild,
-  deleteQuest,
-  removeChild,
-  savePlan,
-  setChildSettings,
-  updateChild,
-} from "#/services/family";
+import { addChild, deleteQuest, removeChild, setChildSettings, updateChild } from "#/services/family";
 import { familyGoalView, giveFamilyGoal, setFamilyGoal, setFamilyGoalOn } from "#/services/family-goal";
 import { acceptInvite, createInvite, familyParents, removeParent } from "#/services/parents";
 import { hasParentPin, setParentPin } from "#/services/parent-pin";
 import { setPin } from "#/services/pin";
 import { chooseStake } from "#/services/stakes";
-import { starterPlansFor, applyStarterPlan } from "#/services/starter-plans";
+import { starterPlansFor } from "#/services/starter-plans";
 import { childView, homeFor, modelLog, parentView, questForChild, sidebar } from "#/services/views";
 import { ageOf } from "#/domain/quest";
 import { getChild } from "#/services/family";
-import { lockChildren, requireChild, unlockChild } from "./child-lock";
+import { getCookie } from "@tanstack/react-start/server";
+import { CHILD_COOKIE, isUnlocked, lockChildren, requireChild, unlockChild } from "./child-lock";
 import { isParentUnlocked, lockParent, requireParentUnlocked, unlockParent } from "./parent-lock";
 import { db } from "./deps";
 import { currentParent, parentOr } from "./session";
 
 const parentOrRedirect = () =>
   parentOr(() => {
-    throw redirect({ to: "/" });
+    throw redirect({ to: "/", search: {} });
   });
 
 // Parent screens: signed in, and past the Parent PIN when the Family has one.
@@ -129,6 +124,10 @@ export const getPinPad = createServerFn()
   .handler(async ({ data }) => {
     const { familyId } = await parentOrRedirect();
     const child = await getChild(db(), familyId, data.childId);
+    // No PIN, or already unlocked (e.g. browser Back after unlocking): straight to their Quests.
+    if (await isUnlocked(familyId, child.id, getCookie(CHILD_COOKIE))) {
+      throw redirect({ to: "/play/$childId", params: { childId: child.id } });
+    }
     return { id: child.id, nickname: child.nickname, pausedUntil: child.pinPausedUntil };
   });
 
@@ -144,21 +143,11 @@ export const getParentChild = createServerFn()
   .handler(async ({ data }) => {
     const { familyId } = await parentScreen();
     const view = await parentView(db(), familyId, data.childId);
-    return { ...view, starterPlans: starterPlansFor(ageOf(view.child.birthYear)) };
-  });
-
-export const savePlanFn = createServerFn({ method: "POST" })
-  .validator(z.object({ childId: z.string(), text: z.string().max(20000) }))
-  .handler(async ({ data }) => {
-    const { familyId } = await parentScreen();
-    await savePlan(db(), familyId, data.childId, data.text);
-  });
-
-export const applyStarterPlanFn = createServerFn({ method: "POST" })
-  .validator(z.object({ childId: z.string(), starterId: z.string() }))
-  .handler(async ({ data }) => {
-    const { familyId } = await parentScreen();
-    await applyStarterPlan(db(), familyId, data.childId, data.starterId);
+    return {
+      ...view,
+      demo: familyId === DEMO_FAMILY_ID,
+      starterPlans: starterPlansFor(ageOf(view.child.birthYear)),
+    };
   });
 
 export const deleteQuestFn = createServerFn({ method: "POST" })

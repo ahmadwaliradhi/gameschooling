@@ -203,6 +203,9 @@ export const verdicts = sqliteTable(
     // "models" or the deciding Parent's id.
     decidedBy: text("decided_by").notNull(),
     decidedAt: integer("decided_at", { mode: "timestamp_ms" }).notNull(),
+    // Set fresh by every Parent decision; null until the first. A decision claims the Verdict by
+    // swapping the revision it read for its own, so two decisions at once cannot both apply.
+    revision: text("revision"),
     createdAt: createdAt(),
   },
   (t) => [index("verdicts_family_outcome").on(t.familyId, t.outcome)],

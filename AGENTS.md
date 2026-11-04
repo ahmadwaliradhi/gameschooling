@@ -20,7 +20,7 @@ Read [`GLOSSARY.md`](GLOSSARY.md) first and use its words. Specs: GitHub issue #
     `segmenter.ts` SAM 3.1, `transcriber.ts` Muse Voice Transcribe, `judge.ts` Muse Spark 1.3,
     `second-judge.ts` Muse Spark Open on Baseten, `guardian.ts` Muse Spark (Guardian check), `worksheet-reader.ts` Muse Spark,
     `digest.ts` Muse Wonder. `log.ts` writes a model log row for every call; `pricing.ts` prices it.
-- `src/services/`: use cases over D1 (`make-quests.ts`, `check-proof.ts`, `worksheet.ts`, `stakes.ts`, `family-goal.ts`, `consequences.ts`, `pin.ts`, `parent-pin.ts`, `parents.ts`, `starter-plans.ts`, `digest.ts`, `family.ts`, `views.ts`, `demo.ts`). `deps.ts` holds the ports (`Deps`, `Blobs`).
+- `src/services/`: use cases over D1 (`make-quests.ts`, `check-proof.ts`, `worksheet.ts`, `stakes.ts`, `family-goal.ts`, `consequences.ts`, `pin.ts`, `parent-pin.ts`, `parents.ts`, `starter-plans.ts`, `digest.ts`, `family.ts`, `views.ts`, `demo.ts`, `rewards.ts`). `points-log.ts` holds the guarded Points log writes: each check rides on its own insert, so concurrent requests cannot double-pay or overspend. `deps.ts` holds the ports (`Deps`, `Blobs`).
 - `src/content/`: Starter Plan texts.
 - `src/server/`: Worker wiring (auth, session, server functions). `src/routes/`: screens and API routes. `src/lib/`: browser-only code (image resize, WAV recording, SAM mask drawing, speech).
 - `src/server.ts`: Worker entry (`fetch`, nightly Demo re-seed, Monday Weekly Digests).

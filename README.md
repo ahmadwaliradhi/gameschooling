@@ -37,7 +37,7 @@ Every model call writes a model log row (agent, actual model, input summary, out
 
 ## Try it
 
-Live: `https://gameschooling.<account>.workers.dev` (set after first deploy).
+Live: https://gameschooling.web.id
 
 1. Press **Demo**. You are the Parent of Nadia (6) and Umar (10).
 2. Nadia has a dot: open "Alif, ba, ta". Recitation always comes to the Parent. Press Accept and watch her Points move.
@@ -58,7 +58,7 @@ pnpm smoke                       # one call to every model endpoint
 pnpm seed                        # rebuild the Demo Family locally
 ```
 
-Deploy: create the D1 database and R2 bucket (`wrangler d1 create gameschooling`, `wrangler r2 bucket create gameschooling`), put the D1 id in `wrangler.jsonc`, set secrets with `wrangler secret put`, then `pnpm deploy`. Demo photos and covers go in R2 under `demo/` (`leaves.jpg`, `blue.jpg`, `apple.jpg`, `cover-<child>-<quest>.webp`).
+Deploy: create the D1 database and R2 bucket (`wrangler d1 create gameschooling`, `wrangler r2 bucket create gameschooling`), put the D1 id in `wrangler.jsonc`, set secrets with `wrangler secret put`, then `pnpm deploy`. Production runs on the custom domain `gameschooling.web.id` (Cloudflare zone, `routes` in `wrangler.jsonc`): `BETTER_AUTH_URL` is `https://gameschooling.web.id`, and the Google OAuth client lists `https://gameschooling.web.id/api/auth/callback/google` as a redirect URI. Demo photos and covers go in R2 under `demo/` (`leaves.jpg`, `blue.jpg`, `apple.jpg`, `cover-<child>-<quest>.webp`).
 
 Stack: TanStack Start on Cloudflare Workers, D1 with Drizzle, R2, Better Auth (Google), shadcn/ui on Tailwind, oxlint and oxfmt, Vitest. See [`AGENTS.md`](AGENTS.md).
 

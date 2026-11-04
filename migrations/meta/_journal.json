@@ -19,8 +19,15 @@
     {
       "idx": 2,
       "version": "6",
-      "when": 1793804647032,
-      "tag": "0002_parent_pin",
+      "when": 1793796546818,
+      "tag": "0002_verdict_revision",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793806059771,
+      "tag": "0003_parent_pin",
       "breakpoints": true
     }
   ]

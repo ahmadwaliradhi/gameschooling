@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { deps, familyWithChild, fakeClient, json, questFor, testDb } from "#/test/harness";
+import { RewardNotReachedError } from "#/domain/points";
+import { deps, familyWithChild, fakeClient, json, questFor, rewardFor, testDb } from "#/test/harness";
 import { checkProof, decideAsParent } from "./check-proof";
 import { setChildSettings } from "./family";
+import { giveRewardTo } from "./rewards";
 import { chooseStake, StakeError } from "./stakes";
-import { childView, parentView, questForChild } from "./views";
+import { childRewards, childView, parentView, questForChild } from "./views";
 
 const verdict = (decision: "pass" | "fail", confidence = 0.9) => ({
   decision,
@@ -129,5 +131,39 @@ describe("Stakes", () => {
     await expect(chooseStake(db, { familyId, questId: easy, multiplier: 2 })).rejects.toBeInstanceOf(
       StakeError,
     );
+  });
+  it("counts a won Stake toward a Reward, and spends it only once", async () => {
+    const { db, familyId, childId, questId } = await hardQuest();
+    await chooseStake(db, { familyId, questId, multiplier: 2 });
+    await checkProof(deps(db, judges("pass", "pass")), { familyId, questId, proof: typed });
+    await rewardFor(db, familyId, childId, "kite", 32);
+    const [kite] = (await childRewards(db, familyId, childId)).filter((r) => r.name === "kite");
+
+    await giveRewardTo(db, { familyId, childId, rewardId: kite!.id });
+
+    expect((await childView(db, familyId, childId)).points).toBe(0);
+    await expect(giveRewardTo(db, { familyId, childId, rewardId: kite!.id })).rejects.toThrow(
+      RewardNotReachedError,
+    );
+  });
+
+  it("settles a Stake once when two Parents accept a waiting Proof at the same time", async () => {
+    const { db, familyId, childId, parentId, questId } = await hardQuest();
+    await chooseStake(db, { familyId, questId, multiplier: 2 });
+    const { verdictId } = await checkProof(deps(db, judges("pass", "fail")), {
+      familyId,
+      questId,
+      proof: typed,
+    });
+
+    await Promise.all([
+      decideAsParent(db, { familyId, parentId, verdictId, choice: "accept" }),
+      decideAsParent(db, { familyId, parentId, verdictId, choice: "accept" }),
+    ]);
+
+    expect((await parentView(db, familyId, childId)).pointsLog.map((e) => [e.kind, e.amount])).toEqual([
+      ["earned", 16],
+      ["stake_won", 16],
+    ]);
   });
 });

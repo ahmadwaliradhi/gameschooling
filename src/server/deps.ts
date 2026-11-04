@@ -16,6 +16,5 @@ export function deps(): Deps {
     client: httpModelClient({ modelApiKey: env.MODEL_API_KEY, basetenApiKey: env.BASETEN_API_KEY }),
     blobs: r2Blobs(env.BLOBS),
     config: { plannerModel: env.PLANNER_MODEL, plannerFallback: env.PLANNER_FALLBACK_MODEL },
-    pause: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   };
 }

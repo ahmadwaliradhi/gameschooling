@@ -4,6 +4,7 @@ import { enterPinFn, getPinPad } from "#/server/fns";
 
 export const Route = createFileRoute("/play/$childId/pin")({
   loader: ({ params }) => getPinPad({ data: { childId: params.childId } }),
+  head: () => ({ meta: [{ title: "PIN · GameSchooling" }] }),
   component: ChildPinPad,
 });
 
@@ -16,7 +17,7 @@ function ChildPinPad() {
       title={child.nickname}
       pausedUntil={child.pausedUntil}
       enter={(pin) => enterPinFn({ data: { childId: child.id, pin } })}
-      onUnlocked={() => navigate({ to: "/play/$childId", params: { childId: child.id } })}
+      onUnlocked={() => navigate({ to: "/play/$childId", params: { childId: child.id }, replace: true })}
     >
       <Link to="/play" className="text-lg text-muted-foreground">
         Back
