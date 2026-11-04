@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, inArray, ne, or, sql } from "drizzle-orm";
 import type { Db } from "#/db";
 import {
   answerVerdicts,
@@ -174,10 +174,15 @@ export async function parentView(db: Db, familyId: string, childId: string) {
     points: await pointsBalance(db, familyId, childId),
     consequences: await consequencesFor(db, familyId, childId),
     // Every balance change, oldest first, so a Parent can trace it.
-    pointsLog: await db.query.pointsLog.findMany({
-      where: and(eq(pointsLog.familyId, familyId), eq(pointsLog.childId, childId)),
-      orderBy: [asc(pointsLog.createdAt), asc(sql`rowid`)],
-    }),
+    // Each entry carries its Quest's title when it came from a Verdict, even one no longer shown.
+    pointsLog: await db
+      .select({ ...getTableColumns(pointsLog), questTitle: quests.title })
+      .from(pointsLog)
+      .leftJoin(verdicts, and(eq(verdicts.id, pointsLog.verdictId), eq(verdicts.familyId, familyId)))
+      .leftJoin(proofs, and(eq(proofs.id, verdicts.proofId), eq(proofs.familyId, familyId)))
+      .leftJoin(quests, and(eq(quests.id, proofs.questId), eq(quests.familyId, familyId)))
+      .where(and(eq(pointsLog.familyId, familyId), eq(pointsLog.childId, childId)))
+      .orderBy(asc(pointsLog.createdAt), asc(sql`${pointsLog}.rowid`)),
   };
 }
 

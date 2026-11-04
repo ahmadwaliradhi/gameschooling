@@ -1028,14 +1028,9 @@ const POINTS_KIND: Record<string, string> = {
 
 function PointsLog(props: { view: View }) {
   if (props.view.pointsLog.length === 0) return null;
-  // Quest names for entries tied to a Quest's latest Verdict.
-  const questByVerdict = new Map(
-    props.view.quests.flatMap((q) => (q.verdict ? [[q.verdict.id, q.title] as const] : [])),
-  );
-  // Newest first, so the top row is the latest change to the balance.
-  const rows = props.view.pointsLog
-    .map((e) => ({ ...e, label: e.rewardName ?? (e.verdictId && questByVerdict.get(e.verdictId)) }))
-    .reverse();
+  // Newest first, so the top row is the latest change to the balance. Entries from any Verdict,
+  // not only a Quest's latest, carry their Quest's title.
+  const rows = props.view.pointsLog.map((e) => ({ ...e, label: e.rewardName ?? e.questTitle })).reverse();
   return (
     <details>
       <summary className="cursor-pointer text-sm text-muted-foreground">Points log</summary>

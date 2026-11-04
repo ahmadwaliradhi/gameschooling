@@ -1,7 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { redirect } from "@tanstack/react-router";
 import { z } from "zod";
-import { decideAnswer, decideAsParent, giveRewardTo } from "#/services/check-proof";
+import { decideAnswer, decideAsParent } from "#/services/check-proof";
+import { giveRewardTo } from "#/services/rewards";
 import { recordConsequence } from "#/services/consequences";
 import { DEMO_FAMILY_ID, DEMO_USER_ID } from "#/services/demo";
 import { digestsFor } from "#/services/digest";

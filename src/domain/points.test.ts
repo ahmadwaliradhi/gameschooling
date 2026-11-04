@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { balance, giveReward, nextReward, parentDecision, pointsForModelVerdict } from "./points";
+import {
+  balance,
+  nextReward,
+  parentDecision,
+  pointsForModelVerdict,
+  rewardGiven,
+  rewardReached,
+} from "./points";
 
 describe("Points log", () => {
   it("pays the Quest's Points only for an accepted Verdict", () => {
@@ -37,12 +44,13 @@ describe("Parent decision", () => {
 describe("Rewards", () => {
   it("subtracts the Reward's price from the balance", () => {
     const log = [{ kind: "earned" as const, amount: 120 }];
-    const entry = giveReward(balance(log), { name: "ice cream", price: 100 });
-    expect(balance([...log, entry])).toBe(20);
+    expect(rewardReached(balance(log), { name: "ice cream", price: 100 })).toBe(true);
+    expect(balance([...log, rewardGiven({ name: "ice cream", price: 100 })])).toBe(20);
   });
 
   it("refuses a Reward the Child has not reached", () => {
-    expect(() => giveReward(40, { name: "ice cream", price: 100 })).toThrow();
+    expect(rewardReached(40, { name: "ice cream", price: 100 })).toBe(false);
+    expect(rewardReached(100, { name: "ice cream", price: 100 })).toBe(true);
   });
 
   it("shows the cheapest Reward not yet reached and how far away it is", () => {

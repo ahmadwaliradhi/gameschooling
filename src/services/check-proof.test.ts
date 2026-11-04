@@ -10,14 +10,10 @@ import {
   rewardFor,
   testDb,
 } from "#/test/harness";
-import {
-  checkProof,
-  decideAsParent,
-  giveRewardTo,
-  ProofKindError,
-  WaitingForParentError,
-} from "./check-proof";
+import { checkProof, decideAsParent, ProofKindError, WaitingForParentError } from "./check-proof";
+import { RewardNotReachedError } from "#/domain/points";
 import { NotFoundError } from "./deps";
+import { giveRewardTo } from "./rewards";
 import { childRewards, childView, modelLog, parentView, sidebar } from "./views";
 
 const verdict = (decision: "pass" | "fail", confidence: number) => ({
@@ -478,6 +474,117 @@ describe("Proof check", () => {
     await giveRewardTo(db, { familyId, childId, rewardId: sticker!.id });
 
     expect((await childView(db, familyId, childId)).points).toBe(5);
-    await expect(giveRewardTo(db, { familyId, childId, rewardId: sticker!.id })).rejects.toThrow();
+    await expect(giveRewardTo(db, { familyId, childId, rewardId: sticker!.id })).rejects.toThrow(
+      RewardNotReachedError,
+    );
+    // The log names the Quest behind each Verdict's Points and the Reward behind each Reward.
+    const log = (await parentView(db, familyId, childId)).pointsLog;
+    expect(log.map((e) => [e.kind, e.questTitle, e.rewardName])).toEqual([
+      ["earned", "Count leaves", null],
+      ["reward_given", null, "sticker"],
+    ]);
+  });
+  it("pays a waiting Verdict once when two Parents accept it at the same time", async () => {
+    const db = await testDb();
+    const { familyId, childId, parentId } = await familyWithChild(db);
+    const questId = await questFor(db, familyId, childId);
+    const client = fakeClient({
+      segment: async () => ({ raw: samLeaves }),
+      ...judges(verdict("pass", 0.9), verdict("fail", 0.9)),
+    });
+    const { verdictId } = await checkProof(deps(db, client), { familyId, questId, proof: photo });
+
+    await Promise.all([
+      decideAsParent(db, { familyId, parentId, verdictId, choice: "accept" }),
+      decideAsParent(db, { familyId, parentId, verdictId, choice: "accept" }),
+    ]);
+
+    const view = await parentView(db, familyId, childId);
+    expect(view.points).toBe(12);
+    expect(view.pointsLog.map((e) => [e.kind, e.amount, e.questTitle])).toEqual([
+      ["earned", 12, "Count leaves"],
+    ]);
+  });
+
+  it("keeps the balance in line with the Verdict when two Parents decide differently at once", async () => {
+    const db = await testDb();
+    const { familyId, childId, parentId } = await familyWithChild(db);
+    const questId = await questFor(db, familyId, childId);
+    const client = fakeClient({
+      segment: async () => ({ raw: samLeaves }),
+      ...judges(verdict("pass", 0.9), verdict("fail", 0.9)),
+    });
+    const { verdictId } = await checkProof(deps(db, client), { familyId, questId, proof: photo });
+
+    await Promise.all([
+      decideAsParent(db, { familyId, parentId, verdictId, choice: "accept" }),
+      decideAsParent(db, { familyId, parentId, verdictId, choice: "reject" }),
+    ]);
+
+    const view = await parentView(db, familyId, childId);
+    const decided = view.quests[0]!.verdict!;
+    expect(["accepted", "not_yet"]).toContain(decided.outcome);
+    const paid = decided.outcome === "accepted" ? 12 : 0;
+    expect(view.points).toBe(paid);
+    expect(view.pointsLog.reduce((sum, e) => sum + e.amount, 0)).toBe(paid);
+    expect(view.pointsLog.every((e) => e.kind === "earned" || e.kind === "overrule")).toBe(true);
+  });
+
+  it("lets a Parent's decision stand when the models' Points arrive after it", async () => {
+    // The models accept, but their Points are slow to write; the Parent says Not yet meanwhile.
+    let hold: { gate: Promise<void>; reached: () => void } | null = null;
+    const db = await testDb({
+      beforeStatement: async (statement) => {
+        if (hold && /^insert into "points_log"/i.test(statement)) {
+          const { gate, reached } = hold;
+          hold = null;
+          reached();
+          await gate;
+        }
+      },
+    });
+    const { familyId, childId, parentId } = await familyWithChild(db);
+    const questId = await questFor(db, familyId, childId);
+    let release = () => {};
+    const reached = new Promise<void>((r) => {
+      hold = { gate: new Promise((g) => (release = g)), reached: r };
+    });
+    const client = fakeClient({
+      segment: async () => ({ raw: samLeaves }),
+      ...judges(verdict("pass", 0.9), verdict("pass", 0.9)),
+    });
+
+    const checking = checkProof(deps(db, client), { familyId, questId, proof: photo });
+    await reached;
+    const [quest] = (await parentView(db, familyId, childId)).quests;
+    await decideAsParent(db, { familyId, parentId, verdictId: quest!.verdict!.id, choice: "reject" });
+    release();
+    await checking;
+
+    const view = await parentView(db, familyId, childId);
+    expect(view.quests[0]!.verdict!.outcome).toBe("not_yet");
+    expect(view.points).toBe(0);
+    expect((await childView(db, familyId, childId)).quests.map((q) => q.state)).toEqual(["try_again"]);
+  });
+
+  it("gives a Reward only once when two Parents give it at the same time", async () => {
+    const db = await testDb();
+    const { familyId, childId } = await familyWithChild(db);
+    const questId = await questFor(db, familyId, childId, { proofKind: "text", lookFor: [], points: 20 });
+    await rewardFor(db, familyId, childId, "sticker", 15);
+    const client = fakeClient(judges(verdict("pass", 0.9), verdict("pass", 0.9)));
+    await checkProof(deps(db, client), { familyId, questId, proof: { kind: "text", text: "ok" } });
+    const [sticker] = await childRewards(db, familyId, childId);
+
+    const results = await Promise.allSettled([
+      giveRewardTo(db, { familyId, childId, rewardId: sticker!.id }),
+      giveRewardTo(db, { familyId, childId, rewardId: sticker!.id }),
+    ]);
+
+    expect(results.map((r) => r.status).sort()).toEqual(["fulfilled", "rejected"]);
+    expect((results.find((r) => r.status === "rejected") as PromiseRejectedResult).reason).toBeInstanceOf(
+      RewardNotReachedError,
+    );
+    expect((await childView(db, familyId, childId)).points).toBe(5);
   });
 });
