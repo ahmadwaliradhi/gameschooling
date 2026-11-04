@@ -7,8 +7,21 @@ import type { ModelClient } from "#/models/client";
 import type { Blobs, Deps } from "#/services/deps";
 import { addChild, ensureFamily, savePlan } from "#/services/family";
 
-export async function testDb(): Promise<Db> {
-  const db = drizzle(createClient({ url: ":memory:" }), { schema });
+// `beforeStatement` runs before each SQL statement and may hold it back, so a test can line up
+// concurrent requests in the order that breaks them.
+export async function testDb(
+  opts: { beforeStatement?: (sql: string) => Promise<void> | void } = {},
+): Promise<Db> {
+  const client = createClient({ url: ":memory:" });
+  const execute = client.execute.bind(client);
+  const hook = opts.beforeStatement;
+  if (hook) {
+    client.execute = (async (stmt: Parameters<typeof execute>[0]) => {
+      await hook(typeof stmt === "string" ? stmt : (stmt as { sql: string }).sql);
+      return execute(stmt);
+    }) as typeof client.execute;
+  }
+  const db = drizzle(client, { schema });
   await migrate(db, { migrationsFolder: "migrations" });
   return db as unknown as Db;
 }

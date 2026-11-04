@@ -15,6 +15,13 @@
       "when": 1793728238418,
       "tag": "0001_post_hackathon",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793796546818,
+      "tag": "0002_verdict_revision",
+      "breakpoints": true
     }
   ]
 }
