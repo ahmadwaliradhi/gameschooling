@@ -10,15 +10,10 @@ import {
   rewardFor,
   testDb,
 } from "#/test/harness";
-import {
-  checkProof,
-  decideAsParent,
-  giveRewardTo,
-  ProofKindError,
-  WaitingForParentError,
-} from "./check-proof";
+import { checkProof, decideAsParent, ProofKindError, WaitingForParentError } from "./check-proof";
 import { RewardNotReachedError } from "#/domain/points";
 import { NotFoundError } from "./deps";
+import { giveRewardTo } from "./rewards";
 import { childRewards, childView, modelLog, parentView, sidebar } from "./views";
 
 const verdict = (decision: "pass" | "fail", confidence: number) => ({
@@ -479,7 +474,15 @@ describe("Proof check", () => {
     await giveRewardTo(db, { familyId, childId, rewardId: sticker!.id });
 
     expect((await childView(db, familyId, childId)).points).toBe(5);
-    await expect(giveRewardTo(db, { familyId, childId, rewardId: sticker!.id })).rejects.toThrow();
+    await expect(giveRewardTo(db, { familyId, childId, rewardId: sticker!.id })).rejects.toThrow(
+      RewardNotReachedError,
+    );
+    // The log names the Quest behind each Verdict's Points and the Reward behind each Reward.
+    const log = (await parentView(db, familyId, childId)).pointsLog;
+    expect(log.map((e) => [e.kind, e.questTitle, e.rewardName])).toEqual([
+      ["earned", "Count leaves", null],
+      ["reward_given", null, "sticker"],
+    ]);
   });
   it("pays a waiting Verdict once when two Parents accept it at the same time", async () => {
     const db = await testDb();
@@ -519,11 +522,52 @@ describe("Proof check", () => {
     ]);
 
     const view = await parentView(db, familyId, childId);
-    const outcome = view.quests[0]?.verdict?.outcome ?? "accepted";
-    expect(view.points).toBe(outcome === "accepted" ? 12 : 0);
+    const decided = view.quests[0]!.verdict!;
+    expect(["accepted", "not_yet"]).toContain(decided.outcome);
+    const paid = decided.outcome === "accepted" ? 12 : 0;
+    expect(view.points).toBe(paid);
+    expect(view.pointsLog.reduce((sum, e) => sum + e.amount, 0)).toBe(paid);
+    expect(view.pointsLog.every((e) => e.kind === "earned" || e.kind === "overrule")).toBe(true);
   });
 
-  it("gives a Reward only once when two Gives race for the same Points", async () => {
+  it("lets a Parent's decision stand when the models' Points arrive after it", async () => {
+    // The models accept, but their Points are slow to write; the Parent says Not yet meanwhile.
+    let hold: { gate: Promise<void>; reached: () => void } | null = null;
+    const db = await testDb({
+      beforeStatement: async (statement) => {
+        if (hold && /^insert into "points_log"/i.test(statement)) {
+          const { gate, reached } = hold;
+          hold = null;
+          reached();
+          await gate;
+        }
+      },
+    });
+    const { familyId, childId, parentId } = await familyWithChild(db);
+    const questId = await questFor(db, familyId, childId);
+    let release = () => {};
+    const reached = new Promise<void>((r) => {
+      hold = { gate: new Promise((g) => (release = g)), reached: r };
+    });
+    const client = fakeClient({
+      segment: async () => ({ raw: samLeaves }),
+      ...judges(verdict("pass", 0.9), verdict("pass", 0.9)),
+    });
+
+    const checking = checkProof(deps(db, client), { familyId, questId, proof: photo });
+    await reached;
+    const [quest] = (await parentView(db, familyId, childId)).quests;
+    await decideAsParent(db, { familyId, parentId, verdictId: quest!.verdict!.id, choice: "reject" });
+    release();
+    await checking;
+
+    const view = await parentView(db, familyId, childId);
+    expect(view.quests[0]!.verdict!.outcome).toBe("not_yet");
+    expect(view.points).toBe(0);
+    expect((await childView(db, familyId, childId)).quests.map((q) => q.state)).toEqual(["try_again"]);
+  });
+
+  it("gives a Reward only once when two Parents give it at the same time", async () => {
     const db = await testDb();
     const { familyId, childId } = await familyWithChild(db);
     const questId = await questFor(db, familyId, childId, { proofKind: "text", lookFor: [], points: 20 });

@@ -27,11 +27,18 @@ export type Reward = { name: string; price: number };
 
 export class RewardNotReachedError extends Error {}
 
-export function giveReward(currentBalance: number, reward: Reward): PointsEntry {
-  if (currentBalance < reward.price) {
-    throw new RewardNotReachedError(`${reward.name} needs ${reward.price} Points`);
-  }
+// A Reward can be given once the balance reaches its price. The service checks this in the same
+// statement that writes `rewardGiven`, so two Rewards given at once cannot both spend the Points.
+export function rewardReached(currentBalance: number, reward: Reward): boolean {
+  return currentBalance >= reward.price;
+}
+
+export function rewardGiven(reward: Reward): PointsEntry {
   return { kind: "reward_given", amount: -reward.price };
+}
+
+export function rewardNotReached(reward: Reward): RewardNotReachedError {
+  return new RewardNotReachedError(`${reward.name} needs ${reward.price} Points`);
 }
 
 export function nextReward<R extends Reward>(
