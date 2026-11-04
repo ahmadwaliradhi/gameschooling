@@ -83,7 +83,6 @@ export function deps(db: Db, client: ModelClient, blobs = memoryBlobs()): Deps {
     client,
     blobs,
     config: { plannerModel: "muse-wonder-1.0", plannerFallback: "muse-spark-1.3" },
-    pause: async () => {},
   };
 }
 
