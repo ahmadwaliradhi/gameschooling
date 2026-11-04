@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { Message } from "#/models/client";
+import type { Message, ModelClient } from "#/models/client";
 import { deps, familyWithChild, fakeClient, json, memoryBlobs, testDb, usage } from "#/test/harness";
 import { makeQuests } from "./make-quests";
-import { modelLog, parentView } from "./views";
+import { childView, modelLog, parentView } from "./views";
 
 const brief = (topic: string, proof_kind: "photo" | "voice" | "text" = "voice") => ({
   topic,
@@ -37,6 +37,14 @@ const writer = (messages: Message[]) => {
   });
 };
 
+type Chat = ModelClient["chat"];
+const safe = { safe: true, reason: "" };
+
+// Writer and Guardian both use chat; the Guardian passes everything unless told otherwise.
+function chatWith(write: Chat, guard: Chat = async () => json(safe)): Chat {
+  return async (req) => (req.schema?.name === "guardian_check" ? guard(req) : write(req));
+}
+
 async function drain(lines: AsyncIterable<string>) {
   const out: string[] = [];
   for await (const line of lines) out.push(line);
@@ -50,7 +58,7 @@ describe("Make quests", () => {
     const blobs = memoryBlobs();
     const client = fakeClient({
       respond: async () => json(plannerOutput, "muse-wonder-1.0"),
-      chat: async ({ messages }) => writer(messages),
+      chat: chatWith(async ({ messages }) => writer(messages)),
       image: async () => ({ bytes: new Uint8Array([1, 2, 3]), contentType: "image/webp" }),
     });
 
@@ -77,10 +85,10 @@ describe("Make quests", () => {
           { ...plannerOutput, quests: [brief("count leaves", "photo"), brief("say numbers"), brief("sing")] },
           "muse-wonder-1.0",
         ),
-      chat: async ({ messages }) => {
+      chat: chatWith(async ({ messages }) => {
         if (userText(messages).includes('"topic":"sing"')) throw new Error("writer timed out");
         return writer(messages);
-      },
+      }),
       image: async ({ prompt }) => {
         if (prompt.includes("say numbers")) throw new Error("content_policy_violation");
         return { bytes: new Uint8Array([9]), contentType: "image/webp" };
@@ -99,6 +107,7 @@ describe("Make quests", () => {
     expect(log.map((c) => [c.agent, c.status])).toEqual([
       ["planner", "ok"],
       ["writer", "ok"],
+      ["guardian", "ok"],
       ["illustrator", "error"],
     ]);
     expect(log.at(-1)?.error).toContain("content_policy_violation");
@@ -112,7 +121,7 @@ describe("Make quests", () => {
         if (model === "muse-wonder-1.0") throw new Error("503 service_overloaded");
         return json({ ...plannerOutput, quests: [brief("say numbers")] }, "muse-spark-1.3");
       },
-      chat: async ({ messages }) => writer(messages),
+      chat: chatWith(async ({ messages }) => writer(messages)),
       image: async () => ({ bytes: new Uint8Array([1]), contentType: "image/webp" }),
     });
 
@@ -136,12 +145,127 @@ describe("Make quests", () => {
     const client = fakeClient({
       respond: async () =>
         json({ ...plannerOutput, quests: [brief("spell cat", "text")] }, "muse-wonder-1.0"),
-      chat: async ({ messages }) => writer(messages),
+      chat: chatWith(async ({ messages }) => writer(messages)),
       image: async () => ({ bytes: new Uint8Array([1]), contentType: "image/webp" }),
     });
 
     await drain(makeQuests(deps(db, client), { familyId, childId }));
 
     expect((await parentView(db, familyId, childId)).quests.map((q) => q.proofKind)).toEqual(["voice"]);
+  });
+
+  it("checks every Quest's text and cover prompt in a separate call, with the Child's age and Plan", async () => {
+    const db = await testDb();
+    const { familyId, childId } = await familyWithChild(db);
+    const checked: string[] = [];
+    const client = fakeClient({
+      respond: async () => json({ ...plannerOutput, quests: [brief("say numbers")] }, "muse-wonder-1.0"),
+      chat: chatWith(
+        async ({ messages }) => writer(messages),
+        async ({ messages }) => {
+          checked.push(userText(messages));
+          return json(safe);
+        },
+      ),
+      image: async () => ({ bytes: new Uint8Array([1]), contentType: "image/webp" }),
+    });
+
+    await drain(makeQuests(deps(db, client), { familyId, childId }));
+
+    expect(checked).toHaveLength(1);
+    expect(checked[0]).toContain("Let's say numbers!");
+    expect(checked[0]).toContain("cover for say numbers");
+    expect(checked[0]).toContain("No fantasy creatures");
+    expect(checked[0]).toMatch(/age: 6/);
+    const [quest] = (await parentView(db, familyId, childId)).quests;
+    const guardian = (await modelLog(db, familyId, { questId: quest!.id })).find(
+      (c) => c.agent === "guardian",
+    );
+    expect(guardian).toMatchObject({ status: "ok", model: "muse-spark-1.3" });
+    expect(guardian?.costUsd).toBeGreaterThan(0);
+  });
+
+  it("rewrites a Quest that fails the check once, and keeps it when the rewrite passes", async () => {
+    const db = await testDb();
+    const { familyId, childId } = await familyWithChild(db);
+    const writes: string[] = [];
+    let checks = 0;
+    const client = fakeClient({
+      respond: async () => json({ ...plannerOutput, quests: [brief("say numbers")] }, "muse-wonder-1.0"),
+      chat: chatWith(
+        async ({ messages }) => {
+          writes.push(userText(messages));
+          return writer(messages);
+        },
+        async () => json(++checks === 1 ? { safe: false, reason: "mentions a dragon" } : safe),
+      ),
+      image: async () => ({ bytes: new Uint8Array([1]), contentType: "image/webp" }),
+    });
+
+    await drain(makeQuests(deps(db, client), { familyId, childId }));
+
+    expect(writes).toHaveLength(2);
+    expect(writes[1]).toContain("mentions a dragon");
+    const view = await parentView(db, familyId, childId);
+    expect(view.quests.map((q) => q.title)).toEqual(["Quest: say numbers"]);
+    expect(view.dropped).toEqual([]);
+  });
+
+  it("drops a Quest that fails twice and shows the Parent why, never the Child", async () => {
+    const db = await testDb();
+    const { familyId, childId } = await familyWithChild(db);
+    const drawn: string[] = [];
+    const client = fakeClient({
+      respond: async () =>
+        json(
+          { ...plannerOutput, quests: [brief("say numbers"), brief("count leaves", "photo")] },
+          "muse-wonder-1.0",
+        ),
+      chat: chatWith(
+        async ({ messages }) => writer(messages),
+        async ({ messages }) =>
+          json(
+            userText(messages).includes("say numbers") ? { safe: false, reason: "a stranger appears" } : safe,
+          ),
+      ),
+      image: async ({ prompt }) => {
+        drawn.push(prompt);
+        return { bytes: new Uint8Array([1]), contentType: "image/webp" };
+      },
+    });
+
+    const lines = await drain(makeQuests(deps(db, client), { familyId, childId }));
+
+    const view = await parentView(db, familyId, childId);
+    expect(view.quests.map((q) => q.title)).toEqual(["Quest: count leaves"]);
+    expect(view.dropped).toMatchObject([
+      { title: "Quest: say numbers", droppedReason: "a stranger appears" },
+    ]);
+    expect((await childView(db, familyId, childId)).quests.map((q) => q.title)).toEqual([
+      "Quest: count leaves",
+    ]);
+    expect(drawn).toEqual(["cover for count leaves"]);
+    expect(lines.at(-1)).toMatch(/1 Quests/);
+  });
+
+  it("drops a Quest when the Guardian cannot be reached, since nothing unchecked reaches a Child", async () => {
+    const db = await testDb();
+    const { familyId, childId } = await familyWithChild(db);
+    const client = fakeClient({
+      respond: async () => json({ ...plannerOutput, quests: [brief("say numbers")] }, "muse-wonder-1.0"),
+      chat: chatWith(
+        async ({ messages }) => writer(messages),
+        async () => {
+          throw new Error("503 unavailable");
+        },
+      ),
+      image: async () => ({ bytes: new Uint8Array([1]), contentType: "image/webp" }),
+    });
+
+    await drain(makeQuests(deps(db, client), { familyId, childId }));
+
+    const view = await parentView(db, familyId, childId);
+    expect(view.quests).toEqual([]);
+    expect(view.dropped[0]?.droppedReason).toMatch(/could not be checked/i);
   });
 });

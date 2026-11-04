@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Read [`GLOSSARY.md`](GLOSSARY.md) first and use its words. Spec: GitHub issue #2.
+Read [`GLOSSARY.md`](GLOSSARY.md) first and use its words. Specs: GitHub issue #2 (core), issue #1 (post-hackathon features).
 
 ## Scripts
 
@@ -14,14 +14,16 @@ Read [`GLOSSARY.md`](GLOSSARY.md) first and use its words. Spec: GitHub issue #2
 
 ## Layout
 
-- `src/domain/`: pure rules. `verdict.ts` (the Verdict rule), `points.ts` (Points log, overrules, Rewards), `quest.ts` (Proof kind by age, Points range).
+- `src/domain/`: pure rules. `verdict.ts` (the Verdict rule), `points.ts` (overrules, Rewards), `quest.ts` (Proof kind by age, Points range, worksheet Verdicts), `family-rules.ts` (balance, Stakes, Streaks, Family Goal, Sibling Board: every screen reads the Points log through it).
 - `src/models/`: one module per model, all behind `client.ts` (`ModelClient`, the only code that talks to model APIs).
   - `planner.ts` Muse Wonder (fallback Muse Spark), `writer.ts` Muse Spark 1.3, `illustrator.ts` Muse Image,
     `segmenter.ts` SAM 3.1, `transcriber.ts` Muse Voice Transcribe, `judge.ts` Muse Spark 1.3,
-    `second-judge.ts` Muse Spark Open on Baseten. `log.ts` writes a model log row for every call; `pricing.ts` prices it.
-- `src/services/`: use cases over D1 (`make-quests.ts`, `check-proof.ts`, `family.ts`, `views.ts`, `demo.ts`). `deps.ts` holds the ports (`Deps`, `Blobs`).
+    `second-judge.ts` Muse Spark Open on Baseten, `guardian.ts` Muse Spark (Guardian check), `worksheet-reader.ts` Muse Spark,
+    `digest.ts` Muse Wonder. `log.ts` writes a model log row for every call; `pricing.ts` prices it.
+- `src/services/`: use cases over D1 (`make-quests.ts`, `check-proof.ts`, `worksheet.ts`, `stakes.ts`, `family-goal.ts`, `consequences.ts`, `pin.ts`, `parents.ts`, `starter-plans.ts`, `digest.ts`, `family.ts`, `views.ts`, `demo.ts`). `deps.ts` holds the ports (`Deps`, `Blobs`).
+- `src/content/`: Starter Plan texts.
 - `src/server/`: Worker wiring (auth, session, server functions). `src/routes/`: screens and API routes. `src/lib/`: browser-only code (image resize, WAV recording, SAM mask drawing, speech).
-- `src/server.ts`: Worker entry (`fetch` + nightly `scheduled` re-seed).
+- `src/server.ts`: Worker entry (`fetch`, nightly Demo re-seed, Monday Weekly Digests).
 
 ## Rules
 

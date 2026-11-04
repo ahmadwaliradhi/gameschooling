@@ -6,7 +6,7 @@ type Call = Awaited<ReturnType<typeof getModelLog>>[number];
 const usd = (n: number | null) => (n === null ? "" : `$${n < 0.01 ? n.toFixed(4) : n.toFixed(3)}`);
 
 // Which models ran, what they saw, what it cost and how long it took.
-export function ModelLog(props: { of: { questId: string } | { verdictId: string } }) {
+export function ModelLog(props: { of: { questId: string } | { verdictId: string } | { runId: string } }) {
   const [calls, setCalls] = useState<Call[] | null>(null);
   const key = JSON.stringify(props.of);
   useEffect(() => {

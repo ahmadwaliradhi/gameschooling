@@ -1,9 +1,27 @@
 import { createServerFn } from "@tanstack/react-start";
 import { redirect } from "@tanstack/react-router";
 import { z } from "zod";
-import { decideAsParent, giveRewardTo } from "#/services/check-proof";
-import { addChild, deleteQuest, removeChild, savePlan, updateChild } from "#/services/family";
+import { decideAnswer, decideAsParent, giveRewardTo } from "#/services/check-proof";
+import { recordConsequence } from "#/services/consequences";
+import { DEMO_FAMILY_ID, DEMO_USER_ID } from "#/services/demo";
+import { digestsFor } from "#/services/digest";
+import {
+  addChild,
+  deleteQuest,
+  removeChild,
+  savePlan,
+  setChildSettings,
+  updateChild,
+} from "#/services/family";
+import { familyGoalView, giveFamilyGoal, setFamilyGoal, setFamilyGoalOn } from "#/services/family-goal";
+import { acceptInvite, createInvite, familyParents, removeParent } from "#/services/parents";
+import { setPin } from "#/services/pin";
+import { chooseStake } from "#/services/stakes";
+import { starterPlansFor, applyStarterPlan } from "#/services/starter-plans";
 import { childView, modelLog, parentView, questForChild, sidebar } from "#/services/views";
+import { ageOf } from "#/domain/quest";
+import { getChild } from "#/services/family";
+import { lockChildren, requireChild, unlockChild } from "./child-lock";
 import { db } from "./deps";
 import { currentParent, parentOr } from "./session";
 
@@ -11,6 +29,11 @@ const parentOrRedirect = () =>
   parentOr(() => {
     throw redirect({ to: "/" });
   });
+
+// The shared Demo Family stays the same for every judge: no PINs, invites or Parent changes.
+function refuseInDemo(familyId: string) {
+  if (familyId === DEMO_FAMILY_ID) throw new Error("Not available in the Demo Family");
+}
 
 const ChildInput = z.object({
   nickname: z.string().trim().min(1).max(40),
@@ -21,6 +44,13 @@ export const getSignedIn = createServerFn().handler(async () => (await currentPa
 
 export const getSidebar = createServerFn().handler(async () => {
   const { familyId } = await parentOrRedirect();
+  return sidebar(db(), familyId);
+});
+
+// The Child picker: going back to it locks every Child again.
+export const getPlayPicker = createServerFn().handler(async () => {
+  const { familyId } = await parentOrRedirect();
+  lockChildren();
   return sidebar(db(), familyId);
 });
 
@@ -38,6 +68,43 @@ export const updateChildFn = createServerFn({ method: "POST" })
     await updateChild(db(), familyId, data.childId, data);
   });
 
+export const setChildSettingsFn = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      childId: z.string(),
+      stakes: z.boolean().nullable().optional(),
+      siblingBoard: z.boolean().optional(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { familyId } = await parentOrRedirect();
+    const { childId, ...settings } = data;
+    await setChildSettings(db(), familyId, childId, settings);
+  });
+
+export const setPinFn = createServerFn({ method: "POST" })
+  .validator(z.object({ childId: z.string(), pin: z.string().nullable() }))
+  .handler(async ({ data }) => {
+    const { familyId } = await parentOrRedirect();
+    refuseInDemo(familyId);
+    await setPin(db(), familyId, data.childId, data.pin);
+  });
+
+export const enterPinFn = createServerFn({ method: "POST" })
+  .validator(z.object({ childId: z.string(), pin: z.string().max(4) }))
+  .handler(async ({ data }) => {
+    const { familyId } = await parentOrRedirect();
+    return unlockChild(familyId, data.childId, data.pin);
+  });
+
+export const getPinPad = createServerFn()
+  .validator(z.object({ childId: z.string() }))
+  .handler(async ({ data }) => {
+    const { familyId } = await parentOrRedirect();
+    const child = await getChild(db(), familyId, data.childId);
+    return { id: child.id, nickname: child.nickname, pausedUntil: child.pinPausedUntil };
+  });
+
 export const removeChildFn = createServerFn({ method: "POST" })
   .validator(z.object({ childId: z.string() }))
   .handler(async ({ data }) => {
@@ -49,7 +116,8 @@ export const getParentChild = createServerFn()
   .validator(z.object({ childId: z.string() }))
   .handler(async ({ data }) => {
     const { familyId } = await parentOrRedirect();
-    return parentView(db(), familyId, data.childId);
+    const view = await parentView(db(), familyId, data.childId);
+    return { ...view, starterPlans: starterPlansFor(ageOf(view.child.birthYear)) };
   });
 
 export const savePlanFn = createServerFn({ method: "POST" })
@@ -57,6 +125,13 @@ export const savePlanFn = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { familyId } = await parentOrRedirect();
     await savePlan(db(), familyId, data.childId, data.text);
+  });
+
+export const applyStarterPlanFn = createServerFn({ method: "POST" })
+  .validator(z.object({ childId: z.string(), starterId: z.string() }))
+  .handler(async ({ data }) => {
+    const { familyId } = await parentOrRedirect();
+    await applyStarterPlan(db(), familyId, data.childId, data.starterId);
   });
 
 export const deleteQuestFn = createServerFn({ method: "POST" })
@@ -73,6 +148,13 @@ export const decideFn = createServerFn({ method: "POST" })
     await decideAsParent(db(), { familyId, parentId, ...data });
   });
 
+export const decideAnswerFn = createServerFn({ method: "POST" })
+  .validator(z.object({ answerId: z.string(), choice: z.enum(["accept", "reject"]) }))
+  .handler(async ({ data }) => {
+    const { familyId, parentId } = await parentOrRedirect();
+    await decideAnswer(db(), { familyId, parentId, ...data });
+  });
+
 export const giveRewardFn = createServerFn({ method: "POST" })
   .validator(z.object({ childId: z.string(), rewardId: z.string() }))
   .handler(async ({ data }) => {
@@ -80,8 +162,27 @@ export const giveRewardFn = createServerFn({ method: "POST" })
     await giveRewardTo(db(), { familyId, ...data });
   });
 
+export const recordConsequenceFn = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      childId: z.string(),
+      privilege: z.string().trim().min(1).max(200),
+      reason: z.string().trim().min(1).max(1000),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { familyId, parentId } = await parentOrRedirect();
+    await recordConsequence(db(), { familyId, parentId, ...data });
+  });
+
 export const getModelLog = createServerFn()
-  .validator(z.union([z.object({ questId: z.string() }), z.object({ verdictId: z.string() })]))
+  .validator(
+    z.union([
+      z.object({ questId: z.string() }),
+      z.object({ verdictId: z.string() }),
+      z.object({ runId: z.string() }),
+    ]),
+  )
   .handler(async ({ data }) => {
     const { familyId } = await parentOrRedirect();
     return modelLog(db(), familyId, data);
@@ -91,12 +192,84 @@ export const getChildView = createServerFn()
   .validator(z.object({ childId: z.string() }))
   .handler(async ({ data }) => {
     const { familyId } = await parentOrRedirect();
+    await requireChild(familyId, data.childId);
     return childView(db(), familyId, data.childId);
   });
 
 export const getQuestPlay = createServerFn()
-  .validator(z.object({ questId: z.string() }))
+  .validator(z.object({ childId: z.string(), questId: z.string() }))
   .handler(async ({ data }) => {
     const { familyId } = await parentOrRedirect();
-    return questForChild(db(), familyId, data.questId);
+    await requireChild(familyId, data.childId);
+    const play = await questForChild(db(), familyId, data.questId);
+    return play?.quest.childId === data.childId ? play : null;
+  });
+
+export const chooseStakeFn = createServerFn({ method: "POST" })
+  .validator(z.object({ childId: z.string(), questId: z.string(), multiplier: z.number().nullable() }))
+  .handler(async ({ data }) => {
+    const { familyId } = await parentOrRedirect();
+    await requireChild(familyId, data.childId);
+    const play = await questForChild(db(), familyId, data.questId);
+    if (play?.quest.childId !== data.childId) throw new Error("Quest not found");
+    await chooseStake(db(), { familyId, questId: data.questId, multiplier: data.multiplier });
+  });
+
+// The Family page: Parents, the Family Goal and past Digests.
+export const getFamily = createServerFn().handler(async () => {
+  const { familyId, parentId } = await parentOrRedirect();
+  const family = await db().query.families.findFirst({
+    where: (f, { eq }) => eq(f.id, familyId),
+  });
+  return {
+    me: parentId,
+    demo: familyId === DEMO_FAMILY_ID,
+    parents: (await familyParents(db(), familyId)).map(({ userId: _u, ...p }) => p),
+    familyGoalOn: family?.familyGoal ?? true,
+    familyGoal: await familyGoalView(db(), familyId),
+    digests: await digestsFor(db(), familyId),
+  };
+});
+
+export const setFamilyGoalFn = createServerFn({ method: "POST" })
+  .validator(
+    z.object({ target: z.number().int().min(1).max(100000), rewardName: z.string().trim().min(1).max(100) }),
+  )
+  .handler(async ({ data }) => {
+    const { familyId } = await parentOrRedirect();
+    await setFamilyGoal(db(), familyId, data);
+  });
+
+export const setFamilyGoalOnFn = createServerFn({ method: "POST" })
+  .validator(z.object({ on: z.boolean() }))
+  .handler(async ({ data }) => {
+    const { familyId } = await parentOrRedirect();
+    await setFamilyGoalOn(db(), familyId, data.on);
+  });
+
+export const giveFamilyGoalFn = createServerFn({ method: "POST" }).handler(async () => {
+  const { familyId } = await parentOrRedirect();
+  await giveFamilyGoal(db(), familyId);
+});
+
+export const createInviteFn = createServerFn({ method: "POST" }).handler(async () => {
+  const { familyId, parentId } = await parentOrRedirect();
+  refuseInDemo(familyId);
+  return createInvite(db(), { familyId, parentId });
+});
+
+export const removeParentFn = createServerFn({ method: "POST" })
+  .validator(z.object({ parentId: z.string() }))
+  .handler(async ({ data }) => {
+    const { familyId } = await parentOrRedirect();
+    refuseInDemo(familyId);
+    await removeParent(db(), { familyId, parentId: data.parentId });
+  });
+
+export const acceptInviteFn = createServerFn({ method: "POST" })
+  .validator(z.object({ token: z.string() }))
+  .handler(async ({ data }) => {
+    const { userId } = await parentOrRedirect();
+    if (userId === DEMO_USER_ID) throw new Error("Sign in with your own account to join a Family");
+    await acceptInvite(db(), { userId, token: data.token });
   });

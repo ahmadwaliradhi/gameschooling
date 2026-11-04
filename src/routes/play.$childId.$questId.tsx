@@ -6,10 +6,10 @@ import { fileUrl } from "#/components/proof-view";
 import { resizeImage } from "#/lib/resize-image";
 import { speak } from "#/lib/speak";
 import { startRecording, type Recording } from "#/lib/wav-recorder";
-import { getQuestPlay } from "#/server/fns";
+import { chooseStakeFn, getQuestPlay } from "#/server/fns";
 
 export const Route = createFileRoute("/play/$childId/$questId")({
-  loader: ({ params }) => getQuestPlay({ data: { questId: params.questId } }),
+  loader: ({ params }) => getQuestPlay({ data: { childId: params.childId, questId: params.questId } }),
   component: QuestPlay,
 });
 
@@ -30,7 +30,7 @@ function QuestPlay() {
   const recording = useRef<Recording | null>(null);
   const camera = useRef<HTMLInputElement>(null);
   if (!data) return null;
-  const { quest } = data;
+  const { quest, stakeOffers } = data;
 
   async function submit(form: FormData) {
     setState("checking");
@@ -67,9 +67,40 @@ function QuestPlay() {
         Play
       </Button>
 
+      {state === "idle" && stakeOffers.length > 0 && (
+        <div className="flex w-full flex-col gap-2">
+          <p className="text-center text-lg">Take a challenge?</p>
+          <div className="grid grid-cols-3 gap-2">
+            {[null, ...stakeOffers].map((o) => {
+              const multiplier = o?.multiplier ?? null;
+              return (
+                <Button
+                  key={multiplier ?? "none"}
+                  variant={quest.stakeMultiplier === multiplier ? "default" : "outline"}
+                  className="h-auto flex-col rounded-2xl py-3 text-lg"
+                  onClick={async () => {
+                    await chooseStakeFn({ data: { childId, questId: quest.id, multiplier } });
+                    await router.invalidate();
+                  }}
+                >
+                  {o ? (
+                    <>
+                      <span>{o.multiplier}×</span>
+                      <span className="text-sm">+{o.bonus} if right, none if not</span>
+                    </>
+                  ) : (
+                    <span>No thanks</span>
+                  )}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {(state === "idle" || state === "error" || state === "recording") && (
         <>
-          {quest.proofKind === "photo" && (
+          {(quest.proofKind === "photo" || quest.proofKind === "worksheet") && (
             <>
               <input
                 ref={camera}
@@ -81,7 +112,15 @@ function QuestPlay() {
                   const file = e.target.files?.[0];
                   if (!file) return;
                   const form = new FormData();
-                  form.set("file", await resizeImage(file), "proof.jpg");
+                  const photo = await resizeImage(file);
+                  form.set("file", photo, "proof.jpg");
+                  if (quest.proofKind === "worksheet") {
+                    // The photo's own size, for SAM box prompts.
+                    const bitmap = await createImageBitmap(photo);
+                    form.set("width", String(bitmap.width));
+                    form.set("height", String(bitmap.height));
+                    bitmap.close();
+                  }
                   await submit(form);
                 }}
               />
@@ -127,7 +166,11 @@ function QuestPlay() {
       )}
 
       {state === "checking" && <p className="animate-pulse text-2xl">Checking</p>}
-      {state === "accepted" && <p className="text-4xl font-semibold">+{quest.points}</p>}
+      {state === "accepted" && (
+        <p className="text-4xl font-semibold">
+          {quest.proofKind === "worksheet" ? "Well done!" : `+${quest.points}`}
+        </p>
+      )}
       {state === "needs_parent" && <p className="text-2xl">Waiting for Mum or Dad</p>}
       {state === "not_yet" && <BigButton onClick={() => setState("idle")}>Try again</BigButton>}
     </main>

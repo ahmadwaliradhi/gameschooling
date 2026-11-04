@@ -1,4 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { and, eq } from "drizzle-orm";
+import { quests } from "#/db/schema";
+import { cookieToken, isUnlocked } from "#/server/child-lock";
 import { deps } from "#/server/deps";
 import { parentOr401 } from "#/server/session";
 import { checkProof, ProofKindError, type ProofInput, WaitingForParentError } from "#/services/check-proof";
@@ -17,6 +20,14 @@ export const Route = createFileRoute("/api/proof")({
           const form = await request.formData();
           const questId = String(form.get("questId") ?? "");
           const kind = String(form.get("kind") ?? "");
+          const { db } = deps();
+          const quest = await db.query.quests.findFirst({
+            where: and(eq(quests.id, questId), eq(quests.familyId, familyId)),
+          });
+          if (!quest) return new Response("Quest not found", { status: 404 });
+          if (!(await isUnlocked(familyId, quest.childId, cookieToken(request)))) {
+            return new Response("Enter the PIN first", { status: 403 });
+          }
           let proof: ProofInput;
           if (kind === "text") {
             proof = { kind, text: String(form.get("text") ?? "").slice(0, 5000) };
@@ -25,7 +36,11 @@ export const Route = createFileRoute("/api/proof")({
             if (!(file instanceof File) || file.size > MAX_BYTES)
               return new Response("Bad file", { status: 400 });
             const bytes = new Uint8Array(await file.arrayBuffer());
+            const width = Number(form.get("width"));
+            const height = Number(form.get("height"));
             if (kind === "photo") proof = { kind, bytes, contentType: file.type || "image/jpeg" };
+            else if (kind === "worksheet" && width > 0 && height > 0)
+              proof = { kind, bytes, contentType: file.type || "image/jpeg", width, height };
             else if (kind === "voice") proof = { kind, wav: bytes };
             else return new Response("Bad kind", { status: 400 });
           }

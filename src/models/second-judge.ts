@@ -34,7 +34,8 @@ export async function secondJudge(
       e.status >= 400 &&
       e.status < 500 &&
       !NOT_A_REJECTION.includes(e.status);
-    if (input.evidence.kind !== "photo" || !rejected) throw e;
+    const kind = input.evidence.kind;
+    if ((kind !== "photo" && kind !== "worksheet") || !rejected) throw e;
     return run(true);
   }
 }

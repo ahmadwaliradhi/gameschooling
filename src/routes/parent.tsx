@@ -39,6 +39,9 @@ function ParentLayout() {
         </Button>
         <div className="mt-auto flex gap-1 pt-4 md:flex-col">
           <Button variant="ghost" className="justify-start" asChild>
+            <Link to="/parent/family">Family</Link>
+          </Button>
+          <Button variant="ghost" className="justify-start" asChild>
             <Link to="/play">Play</Link>
           </Button>
           <Button
