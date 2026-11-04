@@ -82,6 +82,12 @@ export async function latestVerdict(db: Db, familyId: string, questId: string) {
   return (await latestVerdicts(db, familyId, [questId])).get(questId) ?? null;
 }
 
+// Where a device starts after sign-in: the Child picker once there are Children, else the Parent screens.
+export async function homeFor(db: Db, familyId: string): Promise<"/play" | "/parent"> {
+  const child = await db.query.children.findFirst({ where: eq(children.familyId, familyId) });
+  return child ? "/play" : "/parent";
+}
+
 export async function sidebar(db: Db, familyId: string) {
   const childRows = await db.query.children.findMany({
     where: eq(children.familyId, familyId),

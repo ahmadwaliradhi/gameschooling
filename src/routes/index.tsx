@@ -2,11 +2,12 @@ import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { authClient, demoSignIn } from "#/lib/auth-client";
-import { getSignedIn } from "#/server/fns";
+import { getHome } from "#/server/fns";
 
 export const Route = createFileRoute("/")({
   beforeLoad: async () => {
-    if (await getSignedIn()) throw redirect({ to: "/parent" });
+    const home = await getHome();
+    if (home) throw redirect({ to: home });
   },
   component: SignIn,
 });
@@ -23,7 +24,7 @@ function SignIn() {
           disabled={busy}
           onClick={() => {
             setBusy(true);
-            void authClient.signIn.social({ provider: "google", callbackURL: "/parent" });
+            void authClient.signIn.social({ provider: "google", callbackURL: "/" });
           }}
         >
           Sign in with Google
@@ -36,7 +37,7 @@ function SignIn() {
             setBusy(true);
             try {
               await demoSignIn();
-              await navigate({ to: "/parent" });
+              await navigate({ to: (await getHome()) ?? "/parent" });
             } finally {
               setBusy(false);
             }

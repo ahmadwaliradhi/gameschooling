@@ -70,6 +70,10 @@ export const families = sqliteTable("families", {
   id: id(),
   // Family Goal: on by default; only shown with two or more Children.
   familyGoal: integer("family_goal", { mode: "boolean" }).notNull().default(true),
+  // Parent PIN: optional, shared by every Parent, guards the Parent screens on a shared device.
+  parentPinHash: text("parent_pin_hash"),
+  parentPinFailures: integer("parent_pin_failures").notNull().default(0),
+  parentPinPausedUntil: integer("parent_pin_paused_until", { mode: "timestamp_ms" }),
   createdAt: createdAt(),
 });
 

@@ -10,9 +10,11 @@ import {
   removeParentFn,
   setFamilyGoalFn,
   setFamilyGoalOnFn,
+  setParentPinFn,
 } from "#/server/fns";
 
 export const Route = createFileRoute("/parent/family")({
+  gcTime: 0,
   loader: () => getFamily(),
   component: FamilyPage,
 });
@@ -27,7 +29,62 @@ function FamilyPage() {
       <Digests family={family} />
       <FamilyGoal family={family} />
       <Parents family={family} />
+      {!family.demo && <ParentPin family={family} />}
     </div>
+  );
+}
+
+// One optional PIN for every Parent, asked before Parent screens open on this device.
+function ParentPin(props: { family: Family }) {
+  const router = useRouter();
+  const [pin, setPin] = useState("");
+  const has = props.family.hasParentPin;
+  return (
+    <section className="flex flex-col gap-3">
+      <h2 className="font-medium">Parent PIN</h2>
+      <p className="text-sm text-muted-foreground">
+        Optional. Asked before Parent screens open, and again after 30 minutes or a trip to Play. Shared by
+        every Parent. Forgot it? Sign in with Google again.
+      </p>
+      <form
+        className="flex items-center gap-2 text-sm"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (!/^\d{4}$/.test(pin)) return;
+          await setParentPinFn({ data: { pin } });
+          setPin("");
+          await router.invalidate();
+        }}
+      >
+        <span className="flex-1">Parent PIN {has ? "set" : "none"}</span>
+        <Input
+          aria-label="New Parent PIN"
+          placeholder="4 digits"
+          inputMode="numeric"
+          type="password"
+          autoComplete="off"
+          className="w-24"
+          value={pin}
+          onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+        />
+        <Button type="submit" size="sm" variant="outline" disabled={pin.length !== 4}>
+          {has ? "Change" : "Set"}
+        </Button>
+        {has && (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={async () => {
+              await setParentPinFn({ data: { pin: null } });
+              await router.invalidate();
+            }}
+          >
+            Remove
+          </Button>
+        )}
+      </form>
+    </section>
   );
 }
 

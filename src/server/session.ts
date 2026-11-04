@@ -9,7 +9,12 @@ export class SignedOutError extends Error {}
 export async function requireParent(headers?: Headers) {
   const session = await auth().api.getSession({ headers: headers ?? getRequestHeaders() });
   if (!session) throw new SignedOutError("Signed out");
-  return { ...(await ensureFamily(db(), session.user.id)), userId: session.user.id };
+  return {
+    ...(await ensureFamily(db(), session.user.id)),
+    userId: session.user.id,
+    // When this device signed in with Google (or Demo): a fresh sign-in gets past a forgotten Parent PIN.
+    signedInAt: new Date(session.session.createdAt),
+  };
 }
 
 // requireParent, but a signed-out request gets `signedOut()` instead of a throw.

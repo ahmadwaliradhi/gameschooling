@@ -15,6 +15,13 @@
       "when": 1793728238418,
       "tag": "0001_post_hackathon",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793804647032,
+      "tag": "0002_parent_pin",
+      "breakpoints": true
     }
   ]
 }

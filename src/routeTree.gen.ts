@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ParentRouteImport } from './routes/parent'
+import { Route as ParentPinRouteImport } from './routes/parent-pin'
 import { Route as ApiMakeQuestsRouteImport } from './routes/api/make-quests'
 import { Route as ApiProofRouteImport } from './routes/api/proof'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
@@ -32,6 +33,11 @@ const IndexRoute = IndexRouteImport.update({
 const ParentRoute = ParentRouteImport.update({
   id: '/parent',
   path: '/parent',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ParentPinRoute = ParentPinRouteImport.update({
+  id: '/parent-pin',
+  path: '/parent-pin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiMakeQuestsRoute = ApiMakeQuestsRouteImport.update({
@@ -98,6 +104,7 @@ const PlayChildIdPinRoute = PlayChildIdPinRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/parent': typeof ParentRouteWithChildren
+  '/parent-pin': typeof ParentPinRoute
   '/api/make-quests': typeof ApiMakeQuestsRoute
   '/api/proof': typeof ApiProofRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -113,6 +120,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/parent-pin': typeof ParentPinRoute
   '/api/make-quests': typeof ApiMakeQuestsRoute
   '/api/proof': typeof ApiProofRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -130,6 +138,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/parent': typeof ParentRouteWithChildren
+  '/parent-pin': typeof ParentPinRoute
   '/api/make-quests': typeof ApiMakeQuestsRoute
   '/api/proof': typeof ApiProofRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -148,6 +157,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/parent'
+    | '/parent-pin'
     | '/api/make-quests'
     | '/api/proof'
     | '/invite/$token'
@@ -163,6 +173,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/parent-pin'
     | '/api/make-quests'
     | '/api/proof'
     | '/invite/$token'
@@ -179,6 +190,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/parent'
+    | '/parent-pin'
     | '/api/make-quests'
     | '/api/proof'
     | '/invite/$token'
@@ -196,6 +208,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ParentRoute: typeof ParentRouteWithChildren
+  ParentPinRoute: typeof ParentPinRoute
   ApiMakeQuestsRoute: typeof ApiMakeQuestsRoute
   ApiProofRoute: typeof ApiProofRoute
   InviteTokenRoute: typeof InviteTokenRoute
@@ -221,6 +234,13 @@ declare module '@tanstack/react-router' {
       path: '/parent'
       fullPath: '/parent'
       preLoaderRoute: typeof ParentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/parent-pin': {
+      id: '/parent-pin'
+      path: '/parent-pin'
+      fullPath: '/parent-pin'
+      preLoaderRoute: typeof ParentPinRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/make-quests': {
@@ -328,6 +348,7 @@ const ParentRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ParentRoute: ParentRouteWithChildren,
+  ParentPinRoute: ParentPinRoute,
   ApiMakeQuestsRoute: ApiMakeQuestsRoute,
   ApiProofRoute: ApiProofRoute,
   InviteTokenRoute: InviteTokenRoute,

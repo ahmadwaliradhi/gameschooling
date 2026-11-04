@@ -43,8 +43,17 @@ function createAuth() {
         verification: schema.verification,
       },
     }),
+    // A session cookie backed by a `session` row. It lasts 7 days and is pushed back (at most once a day)
+    // whenever the device is used, so a week without use means signing in again.
+    session: { expiresIn: 7 * 24 * 60 * 60, updateAge: 24 * 60 * 60 },
     socialProviders: {
-      google: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET },
+      google: {
+        clientId: env.GOOGLE_CLIENT_ID,
+        clientSecret: env.GOOGLE_CLIENT_SECRET,
+        // Always show Google's account chooser, so signing in (and getting past a forgotten Parent PIN)
+        // is never a silent redirect.
+        prompt: "select_account",
+      },
     },
     plugins: [demoSignIn(), tanstackStartCookies()],
   });

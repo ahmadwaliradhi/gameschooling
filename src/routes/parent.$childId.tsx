@@ -25,6 +25,7 @@ import {
 } from "#/server/fns";
 
 export const Route = createFileRoute("/parent/$childId")({
+  gcTime: 0,
   loader: ({ params }) => getParentChild({ data: { childId: params.childId } }),
   component: ChildPage,
 });

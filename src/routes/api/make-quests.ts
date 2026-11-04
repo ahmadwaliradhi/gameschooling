@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { deps } from "#/server/deps";
+import { parentLocked423 } from "#/server/parent-lock";
 import { parentOr401 } from "#/server/session";
 import { makeQuests } from "#/services/make-quests";
 
@@ -10,6 +11,8 @@ export const Route = createFileRoute("/api/make-quests")({
       POST: async ({ request }) => {
         const parent = await parentOr401(request);
         if (parent instanceof Response) return parent;
+        const locked = await parentLocked423(parent, request);
+        if (locked) return locked;
         const { childId } = (await request.json()) as { childId: string };
         const lines = makeQuests(deps(), { familyId: parent.familyId, childId });
         const encoder = new TextEncoder();
