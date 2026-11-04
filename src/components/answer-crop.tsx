@@ -15,7 +15,19 @@ export function AnswerCrop(props: { photoKey: string; box: AnswerBox }) {
       c.height = Math.max(1, y2 - y1);
       c.getContext("2d")!.drawImage(img, x1, y1, c.width, c.height, 0, 0, c.width, c.height);
     };
+    img.onerror = () => {
+      const g = c.getContext("2d")!;
+      g.font = "12px sans-serif";
+      g.fillText("Could not load", 4, 14);
+    };
     img.src = fileUrl(props.photoKey);
   }, [props.photoKey, x1, y1, x2, y2]);
-  return <canvas ref={canvas} className="max-h-24 max-w-48 rounded border bg-white" />;
+  return (
+    <canvas
+      ref={canvas}
+      role="img"
+      aria-label="Child's answer"
+      className="max-h-24 max-w-48 rounded border bg-white"
+    />
+  );
 }

@@ -1,11 +1,15 @@
-import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
+import { createFileRoute, getRouteApi, useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { ChevronDown, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { AnswerCrop } from "#/components/answer-crop";
 import { ChildForm } from "#/components/child-form";
+import { LocalDate } from "#/components/local-date";
 import { ModelLog } from "#/components/model-log";
 import { ProofView, fileUrl } from "#/components/proof-view";
 import { cn } from "@/lib/utils";
@@ -26,6 +30,9 @@ import {
 
 export const Route = createFileRoute("/parent/$childId")({
   loader: ({ params }) => getParentChild({ data: { childId: params.childId } }),
+  head: ({ loaderData }) => ({
+    meta: [{ title: `${loaderData?.child.nickname ?? "Child"} · GameSchooling` }],
+  }),
   component: ChildPage,
 });
 
@@ -35,157 +42,370 @@ type Quest = View["quests"][number];
 function ChildPage() {
   const view = Route.useLoaderData();
   const [editing, setEditing] = useState(false);
+  const [nameStatus, setNameStatus] = useState<"saved" | "error" | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   // Bumped when a Starter Plan replaces the Plan, so the note shows the new text.
   const [planVersion, setPlanVersion] = useState(0);
+  // What is in the Plan box right now, saved or not.
+  const planText = useRef(view.plan);
+  // Saves any unsaved Plan text; resolves false if the save failed.
+  const flushPlan = useRef<() => Promise<boolean>>(async () => true);
   const router = useRouter();
   const navigate = useNavigate();
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-8">
-      <header className="flex items-baseline gap-3">
-        <button className="text-2xl font-semibold tracking-tight" onClick={() => setEditing(true)}>
-          {view.child.nickname}
-        </button>
-        <span className="ml-auto text-2xl font-semibold tabular-nums">{view.points}</span>
+      <header className="flex flex-wrap items-center gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight">{view.child.nickname}</h1>
+        <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+          <Settings /> Settings
+        </Button>
+        <span className="ml-auto flex items-baseline gap-1.5">
+          <span className="text-2xl font-semibold tabular-nums">{view.points}</span>
+          <span className="text-sm text-muted-foreground">Points</span>
+        </span>
       </header>
-      <PlanNote key={`${view.child.id}-${planVersion}`} childId={view.child.id} initial={view.plan} />
-      <StarterPlans view={view} onUse={() => setPlanVersion((v) => v + 1)} />
-      <MakeQuests childId={view.child.id} />
-      <section className="flex flex-col divide-y rounded-lg border">
-        {view.quests.map((q) => (
-          <QuestRow key={q.id} quest={q} />
-        ))}
+      <section className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 className="font-medium">Plan</h2>
+          <p className="text-sm text-muted-foreground">
+            What Quests should cover. Make quests reads this every time.
+          </p>
+        </div>
+        <PlanNote
+          key={`${view.child.id}-${planVersion}`}
+          childId={view.child.id}
+          initial={view.plan}
+          live={planText}
+          flush={flushPlan}
+        />
+        <MakeQuests
+          key={view.child.id}
+          childId={view.child.id}
+          hasPlan={view.plan.trim().length > 0}
+          flushPlan={() => flushPlan.current()}
+          planEmpty={() => !planText.current.trim()}
+        >
+          <StarterPlans view={view} liveText={planText} onUse={() => setPlanVersion((v) => v + 1)} />
+        </MakeQuests>
       </section>
-      {view.dropped.length > 0 && (
-        <details className="text-sm">
-          <summary className="cursor-pointer text-muted-foreground">
-            {view.dropped.length} Quests dropped by the safety check
-          </summary>
-          <ul className="mt-2 flex flex-col gap-1">
-            {view.dropped.map((q) => (
-              <li key={q.id}>
-                <span className="font-medium">{q.title}</span> · {q.droppedReason}
-              </li>
+      <section className="flex flex-col gap-3">
+        <h2 className="font-medium">Quests</h2>
+        {view.quests.length === 0 ? (
+          <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+            No Quests yet. Write a Plan above, then press Make quests.
+          </p>
+        ) : (
+          <div className="flex flex-col divide-y rounded-lg border">
+            {view.quests.map((q) => (
+              <QuestRow key={q.id} quest={q} />
             ))}
-          </ul>
-        </details>
-      )}
-      {view.rewards.length > 0 && <Rewards view={view} />}
+          </div>
+        )}
+      </section>
+      {view.dropped.length > 0 && <DroppedQuests dropped={view.dropped} />}
+      <section className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 className="font-medium">Rewards</h2>
+          <p className="text-sm text-muted-foreground">
+            Read from the Plan when you press Make quests. Give one to spend its Points.
+          </p>
+        </div>
+        {view.rewards.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No Rewards yet. Add them to the Plan with a price, then press Make quests.
+          </p>
+        ) : (
+          <Rewards view={view} />
+        )}
+      </section>
       <Consequences view={view} />
       <PointsLog view={view} />
-      <Dialog open={editing} onOpenChange={setEditing}>
-        <DialogContent className="max-w-sm">
+      <Dialog
+        open={editing}
+        onOpenChange={(o) => {
+          setEditing(o);
+          setNameStatus(null);
+          setRemoveError(null);
+        }}
+      >
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>{view.child.nickname}</DialogTitle>
+            <DialogTitle>{view.child.nickname}'s settings</DialogTitle>
           </DialogHeader>
           <ChildForm
             initial={view.child}
-            submitLabel="Save"
+            submitLabel="Save name and age"
             onSubmit={async (child) => {
-              await updateChildFn({ data: { childId: view.child.id, ...child } });
-              setEditing(false);
-              await router.invalidate();
+              setNameStatus(null);
+              try {
+                await updateChildFn({ data: { childId: view.child.id, ...child } });
+                setNameStatus("saved");
+                await router.invalidate();
+              } catch {
+                setNameStatus("error");
+              }
             }}
           />
+          <p
+            aria-live="polite"
+            className={cn(
+              "text-xs empty:hidden",
+              nameStatus && "-mt-2",
+              nameStatus === "error" ? "text-destructive" : "text-muted-foreground",
+            )}
+          >
+            {nameStatus === "error" ? "Could not save. Try again." : nameStatus === "saved" ? "Saved" : ""}
+          </p>
+          <ChildSettings view={view} />
           <Button
             variant="ghost"
-            className="text-destructive"
+            className="text-destructive hover:text-destructive"
+            disabled={removing}
             onClick={async () => {
               if (!confirm(`Remove ${view.child.nickname} and everything they did?`)) return;
-              await removeChildFn({ data: { childId: view.child.id } });
-              setEditing(false);
-              await router.invalidate();
-              await navigate({ to: "/parent" });
+              setRemoving(true);
+              setRemoveError(null);
+              try {
+                await removeChildFn({ data: { childId: view.child.id } });
+                setEditing(false);
+                await navigate({ to: "/parent" });
+                void router.invalidate();
+              } catch {
+                setRemoveError("Could not remove. Try again.");
+              } finally {
+                setRemoving(false);
+              }
             }}
           >
-            Remove
+            {removing ? "Removing…" : `Remove ${view.child.nickname}`}
           </Button>
-          <ChildSettings view={view} />
+          {removeError && (
+            <p role="alert" className="text-xs text-destructive">
+              {removeError}
+            </p>
+          )}
         </DialogContent>
       </Dialog>
     </div>
   );
 }
 
+const PLAN_PLACEHOLDER = `What to learn, e.g. counting to 20, letters A to E
+Language, e.g. English and Bahasa Indonesia
+What to avoid, e.g. no dragons or fairies
+Rewards with prices, e.g. ice cream = 100, park trip = 40`;
+
 // Autosaves as the Parent types.
-function PlanNote(props: { childId: string; initial: string }) {
+function PlanNote(props: {
+  childId: string;
+  initial: string;
+  live: React.RefObject<string>;
+  flush: React.RefObject<() => Promise<boolean>>;
+}) {
+  const router = useRouter();
   const [text, setText] = useState(props.initial);
+  const [status, setStatus] = useState<"saved" | "saving" | "error">("saved");
+  // The text last sent, and the text the server last confirmed.
   const saved = useRef(props.initial);
+  const confirmed = useRef(props.initial);
+  const save = async (next: string) => {
+    saved.current = next;
+    setStatus("saving");
+    try {
+      await savePlanFn({ data: { childId: props.childId, text: next } });
+      confirmed.current = next;
+      setStatus(saved.current === next ? "saved" : "saving");
+      // Make quests and the empty-Plan hint read the saved Plan.
+      void router.invalidate();
+      return true;
+    } catch {
+      // Let blur or the next edit try again.
+      if (saved.current === next) saved.current = confirmed.current;
+      setStatus("error");
+      return false;
+    }
+  };
   useEffect(() => {
-    if (text === saved.current) return;
-    const timer = setTimeout(() => {
-      saved.current = text;
-      void savePlanFn({ data: { childId: props.childId, text } });
-    }, 600);
+    props.live.current = text;
+    props.flush.current = async () => text === confirmed.current || (await save(text));
+    if (text === saved.current) {
+      // Typed back to the saved text before the save ran.
+      if (text === confirmed.current) setStatus("saved");
+      return;
+    }
+    setStatus("saving");
+    const timer = setTimeout(() => void save(text), 600);
     return () => clearTimeout(timer);
   }, [text, props.childId]);
   return (
-    <Textarea
-      aria-label="Plan"
-      value={text}
-      onChange={(e) => setText(e.target.value)}
-      onBlur={() => {
-        if (text !== saved.current) {
-          saved.current = text;
-          void savePlanFn({ data: { childId: props.childId, text } });
-        }
-      }}
-      className="min-h-56 resize-y border-none bg-transparent p-0 text-base leading-relaxed shadow-none focus-visible:ring-0"
-    />
+    <div className="flex flex-col gap-1">
+      <Textarea
+        aria-label="Plan"
+        placeholder={PLAN_PLACEHOLDER}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => {
+          if (text !== saved.current) void save(text);
+        }}
+        className="min-h-48 resize-y p-4 text-base leading-relaxed md:text-base"
+      />
+      <div className="flex items-center gap-2 self-end text-xs">
+        <p aria-live="polite" className={status === "error" ? "text-destructive" : "text-muted-foreground"}>
+          {status === "saving"
+            ? "Saving…"
+            : status === "error"
+              ? "Not saved. Check your connection."
+              : "Saved"}
+        </p>
+        {status === "error" && (
+          <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => void save(text)}>
+            Retry
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 
-function MakeQuests(props: { childId: string }) {
+function MakeQuests(props: {
+  childId: string;
+  hasPlan: boolean;
+  flushPlan: () => Promise<boolean>;
+  planEmpty: () => boolean;
+  children?: React.ReactNode;
+}) {
   const router = useRouter();
+  const navigate = useNavigate();
   const [lines, setLines] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
   return (
     <div className="flex flex-col gap-2">
-      <Button
-        className="self-start"
-        disabled={running}
-        onClick={async () => {
-          setRunning(true);
-          setLines([]);
-          try {
-            const res = await fetch("/api/make-quests", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ childId: props.childId }),
-            });
-            const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
-            let buffer = "";
-            for (;;) {
-              const { value, done } = await reader.read();
-              if (done) break;
-              buffer += value;
-              const parts = buffer.split("\n");
-              buffer = parts.pop() ?? "";
-              if (parts.length) {
-                setLines((l) => [...l, ...parts]);
-                if (parts.some((p) => p.startsWith("Wrote") || p.startsWith("Drew")))
-                  void router.invalidate();
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          disabled={running || !props.hasPlan}
+          title={props.hasPlan ? undefined : "Write a Plan first"}
+          onClick={async () => {
+            setRunning(true);
+            setLines([]);
+            try {
+              // Make quests reads the saved Plan, so save what was just typed first.
+              if (!(await props.flushPlan())) {
+                setLines(["The Plan is not saved. Try again."]);
+                return;
               }
+              if (props.planEmpty()) {
+                setLines(["Write a Plan first."]);
+                return;
+              }
+              const res = await fetch("/api/make-quests", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ childId: props.childId }),
+              });
+              if (!res.ok || !res.body) {
+                setLines([
+                  res.status === 401
+                    ? "You are signed out. Sign in again."
+                    : "Could not make Quests. Try again.",
+                ]);
+                if (res.status === 401) void navigate({ to: "/" });
+                return;
+              }
+              const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+              let buffer = "";
+              for (;;) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                buffer += value;
+                const parts = buffer.split("\n");
+                buffer = parts.pop() ?? "";
+                if (parts.length) {
+                  setLines((l) => [...l, ...parts]);
+                  if (parts.some((p) => p.startsWith("Wrote") || p.startsWith("Drew")))
+                    void router.invalidate();
+                }
+              }
+              if (buffer) setLines((l) => [...l, buffer]);
+            } catch {
+              setLines((l) => [...l, "Connection lost"]);
+            } finally {
+              setRunning(false);
+              await router.invalidate();
             }
-          } catch {
-            setLines((l) => [...l, "Connection lost"]);
-          } finally {
-            setRunning(false);
-            await router.invalidate();
-          }
-        }}
-      >
-        Make quests
-      </Button>
+          }}
+        >
+          {running ? "Making quests…" : "Make quests"}
+        </Button>
+        {props.children}
+      </div>
       {lines.length > 0 && (
-        <ol className="flex flex-col gap-0.5 text-sm text-muted-foreground">
+        <ol aria-hidden className="flex flex-col gap-0.5 text-sm text-muted-foreground">
           {lines.map((l, i) => (
-            <li key={i} className={cn(i === lines.length - 1 && running && "animate-pulse")}>
+            <li
+              key={i}
+              className={cn(
+                i === lines.length - 1 && running && "animate-pulse",
+                (l.startsWith("Could not") || l === "Connection lost") && "text-destructive",
+              )}
+            >
               {l}
             </li>
           ))}
         </ol>
       )}
+      <p className="sr-only" aria-live="polite">
+        {lines.at(-1)}
+      </p>
     </div>
+  );
+}
+
+// Quests the safety check turned down, with its reason.
+function DroppedQuests(props: { dropped: View["dropped"] }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const n = props.dropped.length;
+  return (
+    <details className="text-sm">
+      <summary className="cursor-pointer text-muted-foreground">
+        {n} {n === 1 ? "Quest" : "Quests"} dropped by the safety check
+      </summary>
+      {error && (
+        <p role="alert" className="mt-2 text-xs text-destructive">
+          {error}
+        </p>
+      )}
+      <ul className="mt-2 flex flex-col gap-1">
+        {props.dropped.map((q) => (
+          <li key={q.id} className="flex items-center gap-2">
+            <span className="flex-1">
+              <span className="font-medium">{q.title}</span> · {q.droppedReason}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy !== null}
+              onClick={async () => {
+                setBusy(q.id);
+                setError(null);
+                try {
+                  await deleteQuestFn({ data: { questId: q.id } });
+                  await router.invalidate();
+                } catch {
+                  setError("Could not remove. Try again.");
+                } finally {
+                  setBusy(null);
+                }
+              }}
+            >
+              {busy === q.id ? "Removing…" : "Remove"}
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 
@@ -211,79 +431,154 @@ function QuestRow(props: { quest: Quest }) {
   const q = props.quest;
   const router = useRouter();
   const [open, setOpen] = useState(q.verdict?.outcome === "needs_parent");
-  const outcome = q.verdict ? OUTCOME[q.verdict.outcome] : q.status === "done" ? "Done" : "";
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const v = q.verdict;
+  // On a worksheet, only a share of the Points is paid.
+  const n = v?.answers.length ?? 0;
+  const ok = v?.answers.filter((a) => a.outcome === "accepted").length ?? 0;
+  const partial = v !== null && n > 0 && v.outcome !== "needs_parent";
+  const points = partial ? Math.round((q.points * ok) / n) : q.points;
+  const outcome = v
+    ? partial
+      ? `${ok} of ${n} accepted`
+      : OUTCOME[v.outcome]
+    : q.status === "done"
+      ? "Done"
+      : "";
+  const overruled = v !== null && v.decidedBy !== "models" && v.modelOutcome !== v.outcome;
+  const isCurrent = (choice: "accept" | "reject") => {
+    if (!v || v.outcome === "needs_parent") return false;
+    if (n > 0) return choice === "accept" ? ok === n : ok === 0;
+    return (choice === "accept") === (v.outcome === "accepted");
+  };
+  const run = async (action: () => Promise<unknown>, message: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      return true;
+    } catch {
+      setError(message);
+      return false;
+    } finally {
+      setBusy(false);
+      await router.invalidate();
+    }
+  };
   return (
     <div className="flex flex-col">
       <button
         className="flex items-center gap-3 p-3 text-left hover:bg-accent/50"
-        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        onClick={() => {
+          setOpen(!open);
+          setError(null);
+        }}
       >
         <Cover quest={q} className="size-10 shrink-0" />
-        <span className="flex-1 font-medium">{q.title}</span>
+        <span className="min-w-0 flex-1 font-medium">{q.title}</span>
         <span
-          className={cn(
-            "text-sm",
-            q.verdict?.outcome === "needs_parent" ? "font-medium" : "text-muted-foreground",
-          )}
+          className={cn("text-sm", v?.outcome === "needs_parent" ? "font-medium" : "text-muted-foreground")}
         >
-          {q.verdict && q.verdict.decidedBy !== "models" && q.verdict.modelOutcome !== q.verdict.outcome && (
-            <s
-              className="mr-2"
-              title={`${q.verdict.decidedByName ?? "A Parent"}, ${new Date(q.verdict.decidedAt).toLocaleString()}`}
-            >
-              {OUTCOME[q.verdict.modelOutcome]}
+          {overruled && !partial && (
+            <s className="mr-2" aria-label={`Models said ${OUTCOME[v.modelOutcome]}`}>
+              {OUTCOME[v.modelOutcome]}
             </s>
           )}
           {outcome}
         </span>
-        <span className="w-8 text-right text-sm tabular-nums text-muted-foreground">{q.points}</span>
+        <span className="text-right text-sm whitespace-nowrap tabular-nums text-muted-foreground">
+          {partial ? `${points} of ${q.points}` : points} pts
+        </span>
+        <ChevronDown
+          aria-hidden
+          className={cn("size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
+        />
       </button>
       {open && (
         <div className="flex flex-col gap-4 px-3 pt-1 pb-4 md:pl-16">
           <p className="text-sm">{q.readAloud}</p>
-          {q.verdict ? (
+          {v ? (
             <>
-              <ProofView proof={q.verdict.proof} sam={q.verdict.sam} />
-              {q.verdict.answers.length > 0 && q.verdict.proof.photoKey && (
-                <WorksheetAnswers answers={q.verdict.answers} photoKey={q.verdict.proof.photoKey} />
+              <ProofView proof={v.proof} sam={v.sam} />
+              {v.answers.length > 0 && v.proof.photoKey && (
+                <WorksheetAnswers answers={v.answers} photoKey={v.proof.photoKey} />
               )}
               <ul className="flex flex-col gap-1 text-sm">
-                {q.verdict.judges.map((j) => (
+                {v.judges.map((j) => (
                   <li key={j.model}>
                     <span className="font-mono text-xs text-muted-foreground">{j.model}</span> {j.decision}{" "}
                     {Math.round(j.confidence * 100)}%{j.textOnly ? " (text only)" : ""} · {j.reason}
                   </li>
                 ))}
               </ul>
-              <div className="flex gap-2">
-                {(["accept", "reject"] as const).map((choice) => (
-                  <Button
-                    key={choice}
-                    variant={
-                      (choice === "accept") === (q.verdict!.outcome === "accepted") &&
-                      q.verdict!.outcome !== "needs_parent"
-                        ? "default"
-                        : "outline"
-                    }
-                    onClick={async () => {
-                      await decideFn({ data: { verdictId: q.verdict!.id, choice } });
-                      await router.invalidate();
-                    }}
-                  >
-                    {choice === "accept" ? "Accept" : "Reject"}
-                  </Button>
-                ))}
+              {overruled && (
+                <p className="text-xs text-muted-foreground">
+                  Models said {OUTCOME[v.modelOutcome]}; changed by {v.decidedByName ?? "a Parent"} on{" "}
+                  <LocalDate value={v.decidedAt} />
+                </p>
+              )}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex gap-2">
+                  {(["accept", "reject"] as const).map((choice) => (
+                    <Button
+                      key={choice}
+                      variant={isCurrent(choice) ? "default" : "outline"}
+                      aria-pressed={isCurrent(choice)}
+                      disabled={busy}
+                      onClick={async () => {
+                        if (
+                          v.outcome !== "needs_parent" &&
+                          !isCurrent(choice) &&
+                          !confirm(
+                            choice === "reject"
+                              ? `Take back ${points} Points and let ${q.title} be tried again?`
+                              : `Give ${q.points - (partial ? points : 0)} Points for ${q.title}?`,
+                          )
+                        )
+                          return;
+                        const done = await run(
+                          () => decideFn({ data: { verdictId: v.id, choice } }),
+                          "Could not save. This Proof may have changed.",
+                        );
+                        // The row moves once sorted; close it so the next tap lands where expected.
+                        if (done) setOpen(false);
+                      }}
+                    >
+                      {choice === "accept"
+                        ? v.answers.length > 0
+                          ? "Accept all"
+                          : "Accept"
+                        : v.answers.length > 0
+                          ? "Not yet for all"
+                          : "Not yet"}
+                    </Button>
+                  ))}
+                </div>
+                {error && (
+                  <p role="alert" className="text-xs text-destructive">
+                    {error}
+                  </p>
+                )}
               </div>
-              <ModelLog of={{ verdictId: q.verdict.id }} />
+              <ModelLog of={{ verdictId: v.id }} title="How this Proof was checked" />
             </>
-          ) : null}
-          <ModelLog of={{ questId: q.id }} />
+          ) : (
+            error && (
+              <p role="alert" className="text-xs text-destructive">
+                {error}
+              </p>
+            )
+          )}
+          <ModelLog of={{ questId: q.id }} title="How this Quest was made" />
           <Button
             variant="ghost"
             className="self-start text-destructive"
+            disabled={busy}
             onClick={async () => {
-              await deleteQuestFn({ data: { questId: q.id } });
-              await router.invalidate();
+              if (!confirm(`Delete "${q.title}"? Points already earned stay.`)) return;
+              await run(() => deleteQuestFn({ data: { questId: q.id } }), "Could not delete. Try again.");
             }}
           >
             Delete
@@ -296,26 +591,52 @@ function QuestRow(props: { quest: Quest }) {
 
 function Rewards(props: { view: View }) {
   const router = useRouter();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [given, setGiven] = useState<string | null>(null);
+  const { points, child } = props.view;
   return (
-    <section className="flex flex-col divide-y rounded-lg border">
-      {props.view.rewards.map((r) => (
-        <div key={r.id} className="flex items-center gap-3 p-3">
-          <span className="flex-1">{r.name}</span>
-          <span className="text-sm tabular-nums text-muted-foreground">{r.price}</span>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={props.view.points < r.price}
-            onClick={async () => {
-              await giveRewardFn({ data: { childId: props.view.child.id, rewardId: r.id } });
-              await router.invalidate();
-            }}
-          >
-            Give
-          </Button>
-        </div>
-      ))}
-    </section>
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-col divide-y rounded-lg border">
+        {props.view.rewards.map((r) => (
+          <div key={r.id} className="flex flex-wrap items-center gap-3 p-3">
+            <span className="flex-1">{r.name}</span>
+            <span className="text-sm tabular-nums text-muted-foreground">{r.price} Points</span>
+            {points < r.price && (
+              <span className="text-xs text-muted-foreground">{r.price - points} more</span>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy !== null || points < r.price}
+              onClick={async () => {
+                if (!confirm(`Give ${r.name} to ${child.nickname} for ${r.price} Points?`)) return;
+                setBusy(r.id);
+                setError(null);
+                setGiven(null);
+                try {
+                  await giveRewardFn({ data: { childId: child.id, rewardId: r.id } });
+                  setGiven(`Gave ${r.name}.`);
+                } catch {
+                  setError("Could not give this Reward. It may have changed. Try again.");
+                } finally {
+                  setBusy(null);
+                  await router.invalidate();
+                }
+              }}
+            >
+              {busy === r.id ? "Giving…" : "Give"}
+            </Button>
+          </div>
+        ))}
+      </div>
+      <p
+        aria-live="polite"
+        className={cn("text-xs empty:hidden", error ? "text-destructive" : "text-muted-foreground")}
+      >
+        {error ?? given}
+      </p>
+    </div>
   );
 }
 
@@ -324,69 +645,103 @@ type Answer = NonNullable<Quest["verdict"]>["answers"][number];
 // Each worksheet answer: its crop, what the models read, their Verdict, and the Parent's say.
 function WorksheetAnswers(props: { answers: Answer[]; photoKey: string }) {
   const router = useRouter();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   return (
-    <ol className="flex flex-col gap-3">
-      {props.answers.map((a) => (
-        <li key={a.id} className="flex flex-wrap items-center gap-3 text-sm">
-          <AnswerCrop photoKey={props.photoKey} box={a.box} />
-          <div className="flex min-w-40 flex-1 flex-col">
-            <span className="font-medium">{a.question}</span>
-            <span className="text-muted-foreground">Read as: {a.reading || "could not read"}</span>
-            {a.judges.map((j) => (
-              <span key={j.model} className="text-xs text-muted-foreground">
-                {j.model}: {j.decision} {Math.round(j.confidence * 100)}% · {j.reason}
-              </span>
-            ))}
-          </div>
-          <span className={a.outcome === "needs_parent" ? "font-medium" : "text-muted-foreground"}>
-            {a.decidedByName && a.modelOutcome !== a.outcome && (
-              <s className="mr-1" title={a.decidedByName}>
-                {OUTCOME[a.modelOutcome]}
-              </s>
-            )}
-            {OUTCOME[a.outcome]}
-          </span>
-          {(["accept", "reject"] as const).map((choice) => (
-            <Button
-              key={choice}
-              size="sm"
-              variant={
-                a.outcome !== "needs_parent" && (choice === "accept") === (a.outcome === "accepted")
-                  ? "default"
-                  : "outline"
-              }
-              onClick={async () => {
-                await decideAnswerFn({ data: { answerId: a.id, choice } });
-                await router.invalidate();
-              }}
-            >
-              {choice === "accept" ? "Accept" : "Reject"}
-            </Button>
-          ))}
-        </li>
-      ))}
-    </ol>
+    <div className="flex flex-col gap-2">
+      <ol className="flex flex-col gap-3">
+        {props.answers.map((a) => (
+          <li key={a.id} className="flex flex-wrap items-center gap-3 text-sm">
+            <AnswerCrop photoKey={props.photoKey} box={a.box} />
+            <div className="flex min-w-40 flex-1 flex-col">
+              <span className="font-medium">{a.question}</span>
+              <span className="text-muted-foreground">Read as: {a.reading || "could not read"}</span>
+              {a.judges.map((j) => (
+                <span key={j.model} className="text-xs text-muted-foreground">
+                  {j.model}: {j.decision} {Math.round(j.confidence * 100)}% · {j.reason}
+                </span>
+              ))}
+              {a.decidedByName && a.modelOutcome !== a.outcome && (
+                <span className="text-xs text-muted-foreground">
+                  Models said {OUTCOME[a.modelOutcome]}; changed by {a.decidedByName}
+                </span>
+              )}
+            </div>
+            <span className={a.outcome === "needs_parent" ? "font-medium" : "text-muted-foreground"}>
+              {a.decidedByName && a.modelOutcome !== a.outcome && (
+                <s className="mr-1" aria-label={`Models said ${OUTCOME[a.modelOutcome]}`}>
+                  {OUTCOME[a.modelOutcome]}
+                </s>
+              )}
+              {OUTCOME[a.outcome]}
+            </span>
+            {(["accept", "reject"] as const).map((choice) => {
+              const current =
+                a.outcome !== "needs_parent" && (choice === "accept") === (a.outcome === "accepted");
+              const label = choice === "accept" ? "Accept" : "Not yet";
+              return (
+                <Button
+                  key={choice}
+                  size="sm"
+                  variant={current ? "default" : "outline"}
+                  aria-pressed={current}
+                  aria-label={`${label}: ${a.question}`}
+                  disabled={busy !== null}
+                  onClick={async () => {
+                    setBusy(a.id);
+                    setError(null);
+                    try {
+                      await decideAnswerFn({ data: { answerId: a.id, choice } });
+                    } catch {
+                      setError("Could not save. This Proof may have changed.");
+                    } finally {
+                      setBusy(null);
+                      await router.invalidate();
+                    }
+                  }}
+                >
+                  {label}
+                </Button>
+              );
+            })}
+          </li>
+        ))}
+      </ol>
+      {error && (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 
-function StarterPlans(props: { view: View; onUse: () => void }) {
+function StarterPlans(props: { view: View; liveText: React.RefObject<string>; onUse: () => void }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   return (
     <>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="self-start text-muted-foreground"
-        onClick={() => setOpen(true)}
-      >
-        Starter Plans
+      <Button variant="outline" onClick={() => setOpen(true)}>
+        Use a Starter Plan
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[80dvh] max-w-lg overflow-y-auto">
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          setError(null);
+        }}
+      >
+        <DialogContent className="max-h-[80dvh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Starter Plans</DialogTitle>
           </DialogHeader>
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
           <ul className="flex flex-col divide-y">
             {props.view.starterPlans.map((p) => (
               <li key={p.id} className="flex flex-col gap-2 py-3">
@@ -401,16 +756,25 @@ function StarterPlans(props: { view: View; onUse: () => void }) {
                   size="sm"
                   variant="outline"
                   className="self-start"
+                  disabled={busy !== null}
                   onClick={async () => {
-                    if (props.view.plan.trim() && !confirm("Replace the Plan with this Starter Plan?"))
+                    if (props.liveText.current.trim() && !confirm("Replace the Plan with this Starter Plan?"))
                       return;
-                    await applyStarterPlanFn({ data: { childId: props.view.child.id, starterId: p.id } });
-                    await router.invalidate();
-                    props.onUse();
-                    setOpen(false);
+                    setError(null);
+                    setBusy(p.id);
+                    try {
+                      await applyStarterPlanFn({ data: { childId: props.view.child.id, starterId: p.id } });
+                      await router.invalidate();
+                      props.onUse();
+                      setOpen(false);
+                    } catch {
+                      setError("Could not use this Starter Plan. Try again.");
+                    } finally {
+                      setBusy(null);
+                    }
                   }}
                 >
-                  Use
+                  {busy === p.id ? "Using…" : "Use"}
                 </Button>
               </li>
             ))}
@@ -421,74 +785,153 @@ function StarterPlans(props: { view: View; onUse: () => void }) {
   );
 }
 
+const parentRoute = getRouteApi("/parent");
+
 // Stakes, Sibling Board and PIN for one Child.
 function ChildSettings(props: { view: View }) {
   const router = useRouter();
-  const { child } = props.view;
+  const { child, demo } = props.view;
+  const kids = parentRoute.useLoaderData();
   const [pin, setPin] = useState("");
-  const save = async (settings: { stakes?: boolean | null; siblingBoard?: boolean }) => {
-    await setChildSettingsFn({ data: { childId: child.id, ...settings } });
-    await router.invalidate();
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinSaved, setPinSaved] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Shown straight away; put back if the save fails.
+  const [stakes, setStakes] = useState(child.stakes);
+  const [board, setBoard] = useState(child.siblingBoard);
+  useEffect(() => setStakes(child.stakes), [child.stakes]);
+  useEffect(() => setBoard(child.siblingBoard), [child.siblingBoard]);
+  const save = async (settings: { stakes?: boolean | null; siblingBoard?: boolean }, revert: () => void) => {
+    setError(null);
+    try {
+      await setChildSettingsFn({ data: { childId: child.id, ...settings } });
+      await router.invalidate();
+    } catch {
+      revert();
+      setError("Could not save. Try again.");
+    }
   };
+  const changePin = async (next: string | null) => {
+    setPinError(null);
+    setPinSaved(null);
+    try {
+      await setPinFn({ data: { childId: child.id, pin: next } });
+      setPin("");
+      setPinSaved(next ? "PIN set" : "PIN removed");
+      await router.invalidate();
+    } catch {
+      setPinError("Could not save the PIN. Try again.");
+    }
+  };
+  const siblings = kids.filter((k) => k.id !== child.id);
+  const siblingsOn = siblings.filter((k) => k.siblingBoard);
+  const boardHint =
+    siblings.length === 0
+      ? "Needs a sibling. Add another Child first."
+      : !board
+        ? `Shows ${child.nickname} how they compare with siblings this week.`
+        : siblingsOn.length === 0
+          ? `On. It appears once a sibling turns it on too (${siblings.map((k) => k.nickname).join(", ")}).`
+          : `On with ${siblingsOn.map((k) => k.nickname).join(", ")}.`;
   return (
-    <div className="flex flex-col gap-3 border-t pt-4 text-sm">
-      <label className="flex items-center justify-between gap-2">
-        Stakes
-        <select
-          className="rounded-md border bg-transparent px-2 py-1"
-          value={child.stakes === null ? "default" : child.stakes ? "on" : "off"}
-          onChange={(e) =>
-            void save({ stakes: e.target.value === "default" ? null : e.target.value === "on" })
-          }
-        >
-          <option value="default">By age (from 8)</option>
-          <option value="on">On</option>
-          <option value="off">Off</option>
-        </select>
-      </label>
-      <label className="flex items-center justify-between gap-2">
-        Sibling Board
-        <input
-          type="checkbox"
-          checked={child.siblingBoard}
-          onChange={(e) => void save({ siblingBoard: e.target.checked })}
-        />
-      </label>
+    <div className="flex flex-col gap-5 border-t pt-4 text-sm">
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <Label htmlFor="stakes">Stakes</Label>
+          <select
+            id="stakes"
+            className="h-8 rounded-md border bg-transparent px-2"
+            value={stakes === null ? "default" : stakes ? "on" : "off"}
+            onChange={(e) => {
+              const before = stakes;
+              const next = e.target.value === "default" ? null : e.target.value === "on";
+              setStakes(next);
+              void save({ stakes: next }, () => setStakes(before));
+            }}
+          >
+            <option value="default">By age (from 8)</option>
+            <option value="on">On</option>
+            <option value="off">Off</option>
+          </select>
+        </div>
+        <p className="text-xs text-muted-foreground">Lets {child.nickname} bet a bonus on harder Quests.</p>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <Label htmlFor="sibling-board">Sibling Board</Label>
+          <Switch
+            id="sibling-board"
+            checked={board}
+            disabled={siblings.length === 0 && !board}
+            onCheckedChange={(on) => {
+              setBoard(on);
+              void save({ siblingBoard: on }, () => setBoard(!on));
+            }}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">{boardHint}</p>
+      </div>
+      {error && (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
       <form
-        className="flex items-center gap-2"
+        className="flex flex-col gap-1.5"
         onSubmit={async (e) => {
           e.preventDefault();
           if (!/^\d{4}$/.test(pin)) return;
-          await setPinFn({ data: { childId: child.id, pin } });
-          setPin("");
-          await router.invalidate();
+          await changePin(pin);
         }}
       >
-        <span className="flex-1">PIN {child.hasPin ? "set" : "none"}</span>
-        <Input
-          aria-label="New PIN"
-          placeholder="4 digits"
-          inputMode="numeric"
-          className="w-24"
-          value={pin}
-          onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-        />
-        <Button type="submit" size="sm" variant="outline" disabled={pin.length !== 4}>
-          {child.hasPin ? "Reset" : "Set"}
-        </Button>
-        {child.hasPin && (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={async () => {
-              await setPinFn({ data: { childId: child.id, pin: null } });
-              await router.invalidate();
+        <div className="flex items-center gap-2">
+          <Label htmlFor="pin" className="flex-1">
+            PIN
+            <span className="font-normal text-muted-foreground">{child.hasPin ? "set" : "none"}</span>
+          </Label>
+          <Input
+            id="pin"
+            type="password"
+            placeholder="4 digits"
+            inputMode="numeric"
+            autoComplete="off"
+            className="w-24 tracking-widest"
+            disabled={demo}
+            value={pin}
+            onChange={(e) => {
+              setPinError(null);
+              setPinSaved(null);
+              setPin(e.target.value.replace(/\D/g, "").slice(0, 4));
             }}
-          >
-            Remove
+          />
+          <Button type="submit" size="sm" variant="outline" disabled={demo || pin.length !== 4}>
+            {child.hasPin ? "Change" : "Set"}
           </Button>
-        )}
+          {child.hasPin && !demo && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                if (confirm(`Remove ${child.nickname}'s PIN?`)) void changePin(null);
+              }}
+            >
+              Remove
+            </Button>
+          )}
+        </div>
+        <p
+          aria-live="polite"
+          className={cn("text-xs", pinError ? "text-destructive" : "text-muted-foreground")}
+        >
+          {demo
+            ? "PINs are off in the Demo Family. Sign in with Google to set one."
+            : (pinError ??
+              pinSaved ??
+              (pin.length > 0
+                ? `Press ${child.hasPin ? "Change" : "Set"} to save the PIN.`
+                : `${child.nickname} types this PIN before playing. Leave it unset to skip.`))}
+        </p>
       </form>
     </div>
   );
@@ -499,6 +942,8 @@ function Consequences(props: { view: View }) {
   const router = useRouter();
   const [privilege, setPrivilege] = useState("");
   const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   return (
     <details className="flex flex-col gap-3">
       <summary className="cursor-pointer text-sm text-muted-foreground">
@@ -508,22 +953,32 @@ function Consequences(props: { view: View }) {
         className="mt-3 flex flex-col gap-2"
         onSubmit={async (e) => {
           e.preventDefault();
-          if (!privilege.trim() || !reason.trim()) return;
-          await recordConsequenceFn({ data: { childId: props.view.child.id, privilege, reason } });
-          setPrivilege("");
-          setReason("");
-          await router.invalidate();
+          if (busy || !privilege.trim() || !reason.trim()) return;
+          setBusy(true);
+          setError(null);
+          try {
+            await recordConsequenceFn({ data: { childId: props.view.child.id, privilege, reason } });
+            setPrivilege("");
+            setReason("");
+            await router.invalidate();
+          } catch {
+            setError("Could not record. Try again.");
+          } finally {
+            setBusy(false);
+          }
         }}
       >
         <Input
           aria-label="Privilege"
           placeholder="Privilege you control, e.g. no tablet tonight"
+          maxLength={200}
           value={privilege}
           onChange={(e) => setPrivilege(e.target.value)}
         />
         <Input
           aria-label="Reason"
           placeholder="Reason"
+          maxLength={1000}
           value={reason}
           onChange={(e) => setReason(e.target.value)}
         />
@@ -531,10 +986,15 @@ function Consequences(props: { view: View }) {
           type="submit"
           variant="outline"
           className="self-start"
-          disabled={!privilege.trim() || !reason.trim()}
+          disabled={busy || !privilege.trim() || !reason.trim()}
         >
-          Record
+          {busy ? "Recording…" : "Record"}
         </Button>
+        {error && (
+          <p role="alert" className="text-xs text-destructive">
+            {error}
+          </p>
+        )}
       </form>
       <ul className="mt-3 flex flex-col gap-1 text-sm">
         {props.view.consequences.map((c) => (
@@ -542,7 +1002,7 @@ function Consequences(props: { view: View }) {
             <span className="font-medium">{c.privilege}</span> · {c.reason}
             <span className="text-muted-foreground">
               {" "}
-              · {c.parentName}, {new Date(c.createdAt).toLocaleDateString()}
+              · {c.parentName}, <LocalDate value={c.createdAt} />
             </span>
           </li>
         ))}
@@ -561,19 +1021,27 @@ const POINTS_KIND: Record<string, string> = {
 
 function PointsLog(props: { view: View }) {
   if (props.view.pointsLog.length === 0) return null;
+  // Quest names for entries tied to a Quest's latest Verdict.
+  const questByVerdict = new Map(
+    props.view.quests.flatMap((q) => (q.verdict ? [[q.verdict.id, q.title] as const] : [])),
+  );
+  // Newest first, so the top row is the latest change to the balance.
+  const rows = props.view.pointsLog
+    .map((e) => ({ ...e, label: e.rewardName ?? (e.verdictId && questByVerdict.get(e.verdictId)) }))
+    .reverse();
   return (
     <details>
       <summary className="cursor-pointer text-sm text-muted-foreground">Points log</summary>
       <table className="mt-2 w-full text-sm">
         <tbody>
-          {props.view.pointsLog.map((e) => (
+          {rows.map((e) => (
             <tr key={e.id} className="border-t">
               <td className="py-1 pr-3 text-muted-foreground">
-                {new Date(e.createdAt).toLocaleDateString()}
+                <LocalDate value={e.createdAt} />
               </td>
               <td className="py-1 pr-3">
                 {POINTS_KIND[e.kind]}
-                {e.rewardName ? `: ${e.rewardName}` : ""}
+                {e.label ? `: ${e.label}` : ""}
               </td>
               <td className="py-1 text-right tabular-nums">
                 {e.amount > 0 ? "+" : ""}

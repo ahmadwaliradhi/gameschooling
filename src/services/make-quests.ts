@@ -66,8 +66,9 @@ export async function* makeQuests(
       { planText, age, recent },
       { primary: deps.config.plannerModel, fallback: deps.config.plannerFallback },
     );
-  } catch {
-    yield "Could not plan Quests";
+  } catch (e) {
+    console.error("make-quests: plan failed", e);
+    yield "Could not plan Quests. Try again in a minute.";
     return;
   }
 
@@ -104,6 +105,7 @@ export async function* makeQuests(
   });
   for await (const result of inCompletionOrder(drafts)) {
     if (result.status === "rejected") {
+      console.error("make-quests: write failed", result.reason);
       yield "Could not write one Quest";
     } else if (result.value.safe) {
       written.push(result.value);
@@ -132,7 +134,7 @@ export async function* makeQuests(
     }
   }
 
-  yield `Made ${written.length} Quests`;
+  yield written.length === 0 ? "Could not make any Quests. Try again." : `Made ${written.length} Quests`;
 }
 
 async function guard(
