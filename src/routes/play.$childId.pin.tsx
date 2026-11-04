@@ -1,10 +1,11 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { enterPinFn, getPinPad } from "#/server/fns";
 
 export const Route = createFileRoute("/play/$childId/pin")({
   loader: ({ params }) => getPinPad({ data: { childId: params.childId } }),
+  head: () => ({ meta: [{ title: "PIN · GameSchooling" }] }),
   component: PinPad,
 });
 
@@ -14,33 +15,59 @@ function PinPad() {
   const navigate = useNavigate();
   const [pin, setPin] = useState("");
   const [wrong, setWrong] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [pausedUntil, setPausedUntil] = useState<Date | null>(
     child.pausedUntil && new Date(child.pausedUntil) > new Date() ? new Date(child.pausedUntil) : null,
   );
 
+  // Re-enable the pad when the pause ends.
+  useEffect(() => {
+    if (!pausedUntil) return;
+    const ms = pausedUntil.getTime() - Date.now();
+    if (ms <= 0) {
+      setPausedUntil(null);
+      return;
+    }
+    const t = setTimeout(() => {
+      setPausedUntil(null);
+      setWrong(false);
+    }, ms);
+    return () => clearTimeout(t);
+  }, [pausedUntil]);
+
   async function press(digit: string) {
-    if (pausedUntil && pausedUntil > new Date()) return;
-    const next = pin + digit;
+    if (busy || (pausedUntil && pausedUntil > new Date())) return;
+    const next = (pin + digit).slice(0, 4);
     setWrong(false);
     setPin(next);
     if (next.length < 4) return;
-    const result = await enterPinFn({ data: { childId: child.id, pin: next } });
-    setPin("");
-    if (result.ok) {
-      await navigate({ to: "/play/$childId", params: { childId: child.id } });
-      return;
+    setBusy(true);
+    try {
+      const result = await enterPinFn({ data: { childId: child.id, pin: next } });
+      if (result.ok) {
+        await navigate({ to: "/play/$childId", params: { childId: child.id }, replace: true });
+        return;
+      }
+      setWrong(true);
+      if (result.pausedUntil) setPausedUntil(new Date(result.pausedUntil));
+    } catch {
+      setWrong(true);
+    } finally {
+      setPin("");
+      setBusy(false);
     }
-    setWrong(true);
-    if (result.pausedUntil) setPausedUntil(new Date(result.pausedUntil));
   }
 
   const paused = pausedUntil !== null && pausedUntil > new Date();
   return (
     <main className="mx-auto flex w-full max-w-xs flex-1 flex-col items-center justify-center gap-6 p-4">
       <h1 className="text-3xl font-semibold">{child.nickname}</h1>
-      <div className="flex gap-3" aria-label={`${pin.length} of 4 digits`}>
+      <div className="flex gap-3" role="status" aria-label={`${pin.length} of 4 digits`}>
         {[0, 1, 2, 3].map((i) => (
-          <span key={i} className={`size-5 rounded-full border-2 ${i < pin.length ? "bg-primary" : ""}`} />
+          <span
+            key={i}
+            className={`size-5 rounded-full border-2 ${i < pin.length ? "border-foreground bg-foreground" : "border-foreground/50"}`}
+          />
         ))}
       </div>
       {paused ? (
@@ -53,7 +80,7 @@ function PinPad() {
           d ? (
             <Button
               key={i}
-              disabled={paused}
+              disabled={paused || busy}
               className="h-20 rounded-2xl text-3xl"
               onClick={() => void press(d)}
             >

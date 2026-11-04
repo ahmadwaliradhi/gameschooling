@@ -1,4 +1,5 @@
-import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
+import { HeadContent, Link, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
 import appCss from "../styles.css?url";
 
 export const Route = createRootRoute({
@@ -11,7 +12,16 @@ export const Route = createRootRoute({
     links: [{ rel: "stylesheet", href: appCss }],
   }),
   component: () => <Outlet />,
-  notFoundComponent: () => <p className="p-8 text-center text-muted-foreground">Not found</p>,
+  notFoundComponent: () => (
+    <div className="grid flex-1 place-items-center gap-3 p-8 text-center">
+      <div className="flex flex-col items-center gap-3">
+        <p className="text-muted-foreground">This page does not exist.</p>
+        <Button asChild>
+          <Link to="/">Go home</Link>
+        </Button>
+      </div>
+    </div>
+  ),
   shellComponent: RootDocument,
 });
 

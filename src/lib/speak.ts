@@ -7,6 +7,7 @@ export function guessLanguage(text: string): string {
 }
 
 export function speak(text: string) {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
   speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = guessLanguage(text);

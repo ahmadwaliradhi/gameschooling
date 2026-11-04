@@ -21,13 +21,14 @@ import { starterPlansFor, applyStarterPlan } from "#/services/starter-plans";
 import { childView, modelLog, parentView, questForChild, sidebar } from "#/services/views";
 import { ageOf } from "#/domain/quest";
 import { getChild } from "#/services/family";
-import { lockChildren, requireChild, unlockChild } from "./child-lock";
+import { getCookie } from "@tanstack/react-start/server";
+import { CHILD_COOKIE, isUnlocked, lockChildren, requireChild, unlockChild } from "./child-lock";
 import { db } from "./deps";
 import { currentParent, parentOr } from "./session";
 
 const parentOrRedirect = () =>
   parentOr(() => {
-    throw redirect({ to: "/" });
+    throw redirect({ to: "/", search: {} });
   });
 
 // The shared Demo Family stays the same for every judge: no PINs, invites or Parent changes.
@@ -102,6 +103,10 @@ export const getPinPad = createServerFn()
   .handler(async ({ data }) => {
     const { familyId } = await parentOrRedirect();
     const child = await getChild(db(), familyId, data.childId);
+    // No PIN, or already unlocked (e.g. browser Back after unlocking): straight to their Quests.
+    if (await isUnlocked(familyId, child.id, getCookie(CHILD_COOKIE))) {
+      throw redirect({ to: "/play/$childId", params: { childId: child.id } });
+    }
     return { id: child.id, nickname: child.nickname, pausedUntil: child.pinPausedUntil };
   });
 
@@ -117,7 +122,11 @@ export const getParentChild = createServerFn()
   .handler(async ({ data }) => {
     const { familyId } = await parentOrRedirect();
     const view = await parentView(db(), familyId, data.childId);
-    return { ...view, starterPlans: starterPlansFor(ageOf(view.child.birthYear)) };
+    return {
+      ...view,
+      demo: familyId === DEMO_FAMILY_ID,
+      starterPlans: starterPlansFor(ageOf(view.child.birthYear)),
+    };
   });
 
 export const savePlanFn = createServerFn({ method: "POST" })
