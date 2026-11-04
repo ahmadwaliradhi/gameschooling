@@ -14,7 +14,6 @@ export type Deps = {
   client: ModelClient;
   blobs: Blobs;
   config: { plannerModel: string; plannerFallback: string };
-  pause: (ms: number) => Promise<void>;
 };
 
 export function callContext(
