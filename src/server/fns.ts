@@ -6,19 +6,12 @@ import { giveRewardTo } from "#/services/rewards";
 import { recordConsequence } from "#/services/consequences";
 import { DEMO_FAMILY_ID, DEMO_USER_ID } from "#/services/demo";
 import { digestsFor } from "#/services/digest";
-import {
-  addChild,
-  deleteQuest,
-  removeChild,
-  savePlan,
-  setChildSettings,
-  updateChild,
-} from "#/services/family";
+import { addChild, deleteQuest, removeChild, setChildSettings, updateChild } from "#/services/family";
 import { familyGoalView, giveFamilyGoal, setFamilyGoal, setFamilyGoalOn } from "#/services/family-goal";
 import { acceptInvite, createInvite, familyParents, removeParent } from "#/services/parents";
 import { setPin } from "#/services/pin";
 import { chooseStake } from "#/services/stakes";
-import { starterPlansFor, applyStarterPlan } from "#/services/starter-plans";
+import { starterPlansFor } from "#/services/starter-plans";
 import { childView, modelLog, parentView, questForChild, sidebar } from "#/services/views";
 import { ageOf } from "#/domain/quest";
 import { getChild } from "#/services/family";
@@ -128,20 +121,6 @@ export const getParentChild = createServerFn()
       demo: familyId === DEMO_FAMILY_ID,
       starterPlans: starterPlansFor(ageOf(view.child.birthYear)),
     };
-  });
-
-export const savePlanFn = createServerFn({ method: "POST" })
-  .validator(z.object({ childId: z.string(), text: z.string().max(20000) }))
-  .handler(async ({ data }) => {
-    const { familyId } = await parentOrRedirect();
-    await savePlan(db(), familyId, data.childId, data.text);
-  });
-
-export const applyStarterPlanFn = createServerFn({ method: "POST" })
-  .validator(z.object({ childId: z.string(), starterId: z.string() }))
-  .handler(async ({ data }) => {
-    const { familyId } = await parentOrRedirect();
-    await applyStarterPlan(db(), familyId, data.childId, data.starterId);
   });
 
 export const deleteQuestFn = createServerFn({ method: "POST" })
