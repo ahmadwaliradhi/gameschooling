@@ -1,7 +1,8 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, count, eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { Db } from "#/db";
 import {
   answerVerdicts,
+  children,
   pointsLog,
   proofs,
   quests,
@@ -12,9 +13,9 @@ import {
 } from "#/db/schema";
 import {
   balance,
-  giveReward,
   parentDecision,
   pointsForModelVerdict,
+  RewardNotReachedError,
   type ParentChoice,
 } from "#/domain/points";
 import { settleStake, stakeBonus, type PointsEntry, type PointsKind } from "#/domain/family-rules";
@@ -27,7 +28,7 @@ import { callContext, NotFoundError, type Deps } from "./deps";
 import { getChild } from "./family";
 import { judgePair } from "./judge-pair";
 import { judgeWorksheet, type AnswerRow } from "./worksheet";
-import { latestVerdict, offersFor, pointsBalance } from "./views";
+import { latestVerdict, offersFor } from "./views";
 
 export type ProofInput =
   | { kind: "photo"; bytes: Uint8Array; contentType: string }
@@ -189,27 +190,84 @@ export async function checkProof(
 const LEARNING: PointsKind[] = ["earned", "overrule"];
 const STAKE: PointsKind[] = ["stake_won", "stake_lost"];
 
-// Writes the Points entries that bring this Verdict's Stake in line with its outcome.
-async function settleStakeOf(
-  db: Db,
-  input: { familyId: string; childId: string; verdictId: string; bonus: number | null; outcome: Outcome },
-) {
-  const { familyId, childId, verdictId, bonus, outcome } = input;
-  if (bonus === null) return;
-  const settled = await db
-    .select({ kind: pointsLog.kind, amount: pointsLog.amount })
+// How many of this Verdict's entries of these kinds are in the log. The log is insert-only, so the
+// count only grows: a guard on it holding means nobody wrote one in between.
+function entryCount(db: Db, familyId: string, verdictId: string, kinds: PointsKind[]) {
+  return db
+    .select({ n: count() })
     .from(pointsLog)
     .where(
       and(
         eq(pointsLog.verdictId, verdictId),
         eq(pointsLog.familyId, familyId),
-        inArray(pointsLog.kind, STAKE),
+        inArray(pointsLog.kind, kinds),
       ),
     );
-  const entries = settleStake({ bonus, outcome, settled });
-  if (entries.length) {
-    await db.insert(pointsLog).values(entries.map((e) => ({ ...e, familyId, childId, verdictId })));
+}
+
+// Writes one Points entry only if `guard` still holds as it is written. Check and write are one
+// statement, so a concurrent request cannot slip in between. Says whether the entry was written.
+async function insertIf(
+  db: Db,
+  e: PointsEntry & { familyId: string; childId: string; verdictId?: string; rewardName?: string },
+  guard: SQL,
+): Promise<boolean> {
+  const written = await db
+    .insert(pointsLog)
+    .select(
+      db
+        .select({
+          id: sql<string>`${crypto.randomUUID()}`.as("id"),
+          familyId: children.familyId,
+          childId: children.id,
+          kind: sql<PointsKind>`${e.kind}`.as("kind"),
+          amount: sql<number>`${e.amount}`.as("amount"),
+          verdictId: sql<string | null>`${e.verdictId ?? null}`.as("verdict_id"),
+          rewardName: sql<string | null>`${e.rewardName ?? null}`.as("reward_name"),
+          createdAt: sql<Date>`${Date.now()}`.as("created_at"),
+        })
+        .from(children)
+        .where(and(eq(children.id, e.childId), eq(children.familyId, e.familyId), guard)),
+    )
+    .returning({ id: pointsLog.id });
+  return written.length > 0;
+}
+
+// Writes the Points entry that brings this Verdict's Stake in line with its outcome, as long as the
+// learning entries still number `learned` (a later decision settles its own Stake).
+async function settleStakeOf(
+  db: Db,
+  input: {
+    familyId: string;
+    childId: string;
+    verdictId: string;
+    bonus: number | null;
+    outcome: Outcome;
+    learned?: number;
+  },
+) {
+  const { familyId, childId, verdictId, bonus, outcome, learned } = input;
+  if (bonus === null) return;
+  const stillOurs =
+    learned === undefined ? sql`1` : sql`(${entryCount(db, familyId, verdictId, LEARNING)}) = ${learned}`;
+  for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+    const settled = await db
+      .select({ kind: pointsLog.kind, amount: pointsLog.amount })
+      .from(pointsLog)
+      .where(
+        and(
+          eq(pointsLog.verdictId, verdictId),
+          eq(pointsLog.familyId, familyId),
+          inArray(pointsLog.kind, STAKE),
+        ),
+      );
+    const [entry] = settleStake({ bonus, outcome, settled });
+    if (!entry) return;
+    const guard = sql`(${entryCount(db, familyId, verdictId, STAKE)}) = ${settled.length} and ${stillOurs}`;
+    if (await insertIf(db, { ...entry, familyId, childId, verdictId }, guard)) return;
+    if (learned !== undefined && (await paidFor(db, familyId, verdictId)).count !== learned) return;
   }
+  throw new DecisionConflictError("The Stake changed while it was being settled; try again");
 }
 
 type Decidable = {
@@ -240,48 +298,84 @@ async function decidable(db: Db, familyId: string, verdictId: string): Promise<D
   return row;
 }
 
-// What this Verdict has already moved into the balance for learning (Stakes apart).
+// Two decisions on one Verdict can arrive at once (two tabs, two Parents). Each retries on a
+// conflict, reading again, a few times before giving up.
+const ATTEMPTS = 5;
+export class DecisionConflictError extends Error {}
+
+// What this Verdict has already moved into the balance for learning (Stakes apart), and from how
+// many entries.
 async function paidFor(db: Db, familyId: string, verdictId: string) {
-  return balance(
-    await db
-      .select({ kind: pointsLog.kind, amount: pointsLog.amount })
-      .from(pointsLog)
-      .where(
-        and(
-          eq(pointsLog.verdictId, verdictId),
-          eq(pointsLog.familyId, familyId),
-          inArray(pointsLog.kind, LEARNING),
-        ),
+  const rows = await db
+    .select({ kind: pointsLog.kind, amount: pointsLog.amount })
+    .from(pointsLog)
+    .where(
+      and(
+        eq(pointsLog.verdictId, verdictId),
+        eq(pointsLog.familyId, familyId),
+        inArray(pointsLog.kind, LEARNING),
       ),
-  );
+    );
+  return { paid: balance(rows), count: rows.length };
 }
 
+// Writes one decision, computed while the Verdict had `seen` learning entries. Every write is
+// guarded on that count, so a decision made from stale reads writes nothing and returns false.
 async function applyDecision(
   db: Db,
   row: Decidable,
-  d: { parentId: string; outcome: Outcome; entries: PointsEntry[]; stakeOutcome: Outcome },
-) {
+  d: { parentId: string; outcome: Outcome; entries: PointsEntry[]; stakeOutcome: Outcome; seen: number },
+): Promise<boolean> {
   const { familyId, id: verdictId } = row.verdict;
   const childId = row.quest.childId;
-  await db
+  const learned = () => entryCount(db, familyId, verdictId, LEARNING);
+  const [entry, ...more] = d.entries;
+  if (more.length) throw new Error("A decision moves Points by one entry");
+  if (entry) {
+    const guard = sql`(${learned()}) = ${d.seen}`;
+    if (!(await insertIf(db, { ...entry, familyId, childId, verdictId }, guard))) return false;
+  }
+  // From here on, a decision that moves Points after this one also writes its own outcome; this
+  // one's remaining writes then step aside.
+  const after = d.seen + (entry ? 1 : 0);
+  const stillOurs = sql`(${learned()}) = ${after}`;
+  const decided = await db
     .update(verdicts)
     .set({ outcome: d.outcome, decidedBy: d.parentId, decidedAt: new Date() })
-    .where(and(eq(verdicts.id, verdictId), eq(verdicts.familyId, familyId)));
-  if (d.entries.length) {
-    await db.insert(pointsLog).values(d.entries.map((e) => ({ ...e, familyId, childId, verdictId })));
-  }
-  await settleStakeOf(db, { familyId, childId, verdictId, bonus: row.stakeBonus, outcome: d.stakeOutcome });
+    .where(and(eq(verdicts.id, verdictId), eq(verdicts.familyId, familyId), stillOurs))
+    .returning({ id: verdicts.id });
+  if (!decided.length) return !!entry;
+  await settleStakeOf(db, {
+    familyId,
+    childId,
+    verdictId,
+    bonus: row.stakeBonus,
+    outcome: d.stakeOutcome,
+    learned: after,
+  });
   if (row.quest.status !== "deleted") {
     await db
       .update(quests)
       .set({ status: d.outcome === "accepted" ? "done" : "open" })
-      .where(and(eq(quests.id, row.quest.id), eq(quests.familyId, familyId)));
+      .where(and(eq(quests.id, row.quest.id), eq(quests.familyId, familyId), stillOurs));
   }
+  return true;
+}
+
+async function untilApplied(attempt: () => Promise<boolean>) {
+  for (let i = 0; i < ATTEMPTS; i++) {
+    if (await attempt()) return;
+  }
+  throw new DecisionConflictError("The Verdict changed while it was being decided; try again");
 }
 
 // A worksheet's Verdict follows its answers: Points move by the change in the accepted share.
-async function rescoreWorksheet(db: Db, row: Decidable, parentId: string) {
-  const { familyId, id: verdictId } = row.verdict;
+async function rescoreWorksheet(db: Db, familyId: string, verdictId: string, parentId: string) {
+  await untilApplied(() => rescoreOnce(db, familyId, verdictId, parentId));
+}
+
+async function rescoreOnce(db: Db, familyId: string, verdictId: string, parentId: string) {
+  const row = await decidable(db, familyId, verdictId);
   const answers = await db.query.answerVerdicts.findMany({
     where: and(eq(answerVerdicts.verdictId, verdictId), eq(answerVerdicts.familyId, familyId)),
   });
@@ -289,14 +383,16 @@ async function rescoreWorksheet(db: Db, row: Decidable, parentId: string) {
     answers.map((a) => a.outcome),
     row.quest.points,
   );
-  const delta = total.points - (await paidFor(db, familyId, verdictId));
+  const { paid, count: seen } = await paidFor(db, familyId, verdictId);
+  const delta = total.points - paid;
   // Deciding a waiting worksheet is the first decision; changing a decided one is an overrule.
   const kind = row.verdict.outcome === "needs_parent" ? "earned" : "overrule";
-  await applyDecision(db, row, {
+  return applyDecision(db, row, {
     parentId,
     outcome: total.outcome,
     entries: delta === 0 || total.outcome === "needs_parent" ? [] : [{ kind, amount: delta }],
     stakeOutcome: total.stakeOutcome,
+    seen,
   });
 }
 
@@ -305,7 +401,7 @@ export async function decideAsParent(
   input: { familyId: string; parentId: string; verdictId: string; choice: ParentChoice },
 ) {
   const { familyId, verdictId, parentId } = input;
-  const row = await decidable(db, familyId, verdictId);
+  await decidable(db, familyId, verdictId);
   const outcome: Outcome = input.choice === "accept" ? "accepted" : "not_yet";
   const answers = await db.query.answerVerdicts.findMany({
     where: and(eq(answerVerdicts.verdictId, verdictId), eq(answerVerdicts.familyId, familyId)),
@@ -316,15 +412,18 @@ export async function decideAsParent(
       .update(answerVerdicts)
       .set({ outcome, decidedBy: parentId, decidedAt: new Date() })
       .where(and(eq(answerVerdicts.verdictId, verdictId), eq(answerVerdicts.familyId, familyId)));
-    await rescoreWorksheet(db, row, parentId);
+    await rescoreWorksheet(db, familyId, verdictId, parentId);
     return;
   }
-  const paid = await paidFor(db, familyId, verdictId);
-  const decision = parentDecision(
-    { outcome: row.verdict.outcome, paid, points: row.quest.points },
-    input.choice,
-  );
-  await applyDecision(db, row, { parentId, ...decision, stakeOutcome: decision.outcome });
+  await untilApplied(async () => {
+    const row = await decidable(db, familyId, verdictId);
+    const { paid, count: seen } = await paidFor(db, familyId, verdictId);
+    const decision = parentDecision(
+      { outcome: row.verdict.outcome, paid, points: row.quest.points },
+      input.choice,
+    );
+    return applyDecision(db, row, { parentId, ...decision, stakeOutcome: decision.outcome, seen });
+  });
 }
 
 // A Parent decides one answer on a worksheet.
@@ -337,7 +436,7 @@ export async function decideAnswer(
     where: and(eq(answerVerdicts.id, input.answerId), eq(answerVerdicts.familyId, familyId)),
   });
   if (!answer) throw new NotFoundError("Answer not found");
-  const row = await decidable(db, familyId, answer.verdictId);
+  await decidable(db, familyId, answer.verdictId);
   await db
     .update(answerVerdicts)
     .set({
@@ -346,7 +445,7 @@ export async function decideAnswer(
       decidedAt: new Date(),
     })
     .where(and(eq(answerVerdicts.id, answer.id), eq(answerVerdicts.familyId, familyId)));
-  await rescoreWorksheet(db, row, parentId);
+  await rescoreWorksheet(db, familyId, answer.verdictId, parentId);
 }
 
 export async function giveRewardTo(db: Db, input: { familyId: string; childId: string; rewardId: string }) {
@@ -358,11 +457,19 @@ export async function giveRewardTo(db: Db, input: { familyId: string; childId: s
     ),
   });
   if (!reward) throw new NotFoundError("Reward not found");
-  const entry = giveReward(await pointsBalance(db, input.familyId, input.childId), reward);
-  await db.insert(pointsLog).values({
-    ...entry,
-    familyId: input.familyId,
-    childId: input.childId,
-    rewardName: reward.name,
-  });
+  // The balance check rides on the insert itself, so two Gives at once cannot both spend it.
+  const given = await insertIf(
+    db,
+    { kind: "reward_given", amount: -reward.price, ...input, rewardName: reward.name },
+    sql`(${balanceSql(input.familyId, input.childId)}) >= ${reward.price}`,
+  );
+  if (!given) throw new RewardNotReachedError(`${reward.name} needs ${reward.price} Points`);
+}
+
+// `balance` from #/domain/family-rules, in SQL: Stakes net to no less than zero.
+function balanceSql(familyId: string, childId: string) {
+  const stake = sql`${pointsLog.kind} in ('stake_won', 'stake_lost')`;
+  return sql`select coalesce(sum(case when ${stake} then 0 else ${pointsLog.amount} end), 0)
+    + max(0, coalesce(sum(case when ${stake} then ${pointsLog.amount} else 0 end), 0))
+    from ${pointsLog} where ${pointsLog.familyId} = ${familyId} and ${pointsLog.childId} = ${childId}`;
 }

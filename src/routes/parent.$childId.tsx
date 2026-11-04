@@ -580,6 +580,7 @@ function PointsLog(props: { view: View }) {
               <td className="py-1 pr-3">
                 {POINTS_KIND[e.kind]}
                 {e.rewardName ? `: ${e.rewardName}` : ""}
+                {e.questTitle ? `: ${e.questTitle}` : ""}
               </td>
               <td className="py-1 text-right tabular-nums">
                 {e.amount > 0 ? "+" : ""}
