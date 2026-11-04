@@ -35,8 +35,6 @@ type Quest = View["quests"][number];
 function ChildPage() {
   const view = Route.useLoaderData();
   const [editing, setEditing] = useState(false);
-  // Bumped when a Starter Plan replaces the Plan, so the note shows the new text.
-  const [planVersion, setPlanVersion] = useState(0);
   const router = useRouter();
   const navigate = useNavigate();
   return (
@@ -47,8 +45,8 @@ function ChildPage() {
         </button>
         <span className="ml-auto text-2xl font-semibold tabular-nums">{view.points}</span>
       </header>
-      <PlanNote key={`${view.child.id}-${planVersion}`} childId={view.child.id} initial={view.plan} />
-      <StarterPlans view={view} onUse={() => setPlanVersion((v) => v + 1)} />
+      <PlanNote key={view.child.id} childId={view.child.id} initial={view.plan} />
+      <StarterPlans view={view} />
       <MakeQuests childId={view.child.id} />
       <section className="flex flex-col divide-y rounded-lg border">
         {view.quests.map((q) => (
@@ -106,10 +104,19 @@ function ChildPage() {
   );
 }
 
-// Autosaves as the Parent types.
+// Autosaves as the Parent types. Takes a new Plan from the server (a Starter Plan
+// was used) unless the Parent has unsaved typing.
 function PlanNote(props: { childId: string; initial: string }) {
   const [text, setText] = useState(props.initial);
   const saved = useRef(props.initial);
+  const [lastInitial, setLastInitial] = useState(props.initial);
+  if (props.initial !== lastInitial) {
+    setLastInitial(props.initial);
+    if (text === saved.current) {
+      saved.current = props.initial;
+      setText(props.initial);
+    }
+  }
   useEffect(() => {
     if (text === saved.current) return;
     const timer = setTimeout(() => {
@@ -369,7 +376,7 @@ function WorksheetAnswers(props: { answers: Answer[]; photoKey: string }) {
   );
 }
 
-function StarterPlans(props: { view: View; onUse: () => void }) {
+function StarterPlans(props: { view: View }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   return (
@@ -406,7 +413,6 @@ function StarterPlans(props: { view: View; onUse: () => void }) {
                       return;
                     await applyStarterPlanFn({ data: { childId: props.view.child.id, starterId: p.id } });
                     await router.invalidate();
-                    props.onUse();
                     setOpen(false);
                   }}
                 >
