@@ -83,7 +83,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: https://gameschooling.ahmadwaliradhi.workers.dev
+      url: https://gameschooling.web.id
     concurrency:
       group: production
       cancel-in-progress: false

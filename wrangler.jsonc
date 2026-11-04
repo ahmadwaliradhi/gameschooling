@@ -6,6 +6,10 @@
   "main": "./src/server.ts",
   "observability": { "enabled": true },
   "upload_source_maps": true,
+  // Production serves on the custom domain (zone gameschooling.web.id on Cloudflare).
+  "routes": [{ "pattern": "gameschooling.web.id", "custom_domain": true }],
+  // Keep workers.dev on too: declaring routes otherwise disables it.
+  "workers_dev": true,
   "d1_databases": [
     {
       "binding": "DB",
@@ -26,6 +30,9 @@
     // never add versions to production. Shares production D1/R2; no cron.
     "preview": {
       "triggers": { "crons": [] },
+      // Preview stays on workers.dev; never claim the production custom domain.
+      "routes": [],
+      "workers_dev": true,
       "vars": {
         "PLANNER_MODEL": "muse-wonder-1.0",
         "PLANNER_FALLBACK_MODEL": "muse-spark-1.3",
@@ -43,4 +50,5 @@
   },
   // Secrets (wrangler secret put / .dev.vars): MODEL_API_KEY, BASETEN_API_KEY,
   // GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, BETTER_AUTH_SECRET, BETTER_AUTH_URL
+  // (production BETTER_AUTH_URL = https://gameschooling.web.id)
 }
