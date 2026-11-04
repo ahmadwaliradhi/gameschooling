@@ -89,66 +89,77 @@ export async function checkProof(
   let findings: SamFinding[] | null = null;
   let stored: Partial<typeof proofs.$inferInsert> = {};
   let sheet: { imageUrl: string; width: number; height: number } | null = null;
-  if (proof.kind === "worksheet") {
-    const photoKey = `proofs/${familyId}/${proofId}`;
-    await deps.blobs.put(photoKey, proof.bytes, proof.contentType);
-    sheet = { imageUrl: dataUrl(proof.bytes, proof.contentType), width: proof.width, height: proof.height };
-    stored = { photoKey, photoWidth: proof.width, photoHeight: proof.height };
-  } else if (proof.kind === "photo") {
-    const photoKey = `proofs/${familyId}/${proofId}`;
-    await deps.blobs.put(photoKey, proof.bytes, proof.contentType);
-    const imageUrl = dataUrl(proof.bytes, proof.contentType);
-    const results = await Promise.all(
-      quest.lookFor.map(async (l) => {
-        try {
-          const r = await segment(ctx, { phrase: l.phrase, imageUrl });
-          return { phrase: l.phrase, wanted: l.count, found: r.found, raw: r.raw };
-        } catch {
-          return null;
-        }
-      }),
-    );
-    findings = results.filter((f) => f !== null);
-    evidence = { kind: "photo", imageUrl, findings };
-    stored = { photoKey };
-  } else if (proof.kind === "voice") {
-    // The recording is passed straight through and never stored.
-    const turns = await transcribe(ctx, proof.wav);
-    evidence = { kind: "voice", turns };
-    stored = { transcript: turns };
-  } else {
-    evidence = { kind: "text", text: proof.text };
-    stored = { text: proof.text };
-  }
-  await db
-    .insert(proofs)
-    .values({ id: proofId, familyId, questId, kind: proof.kind, stakeBonus: stake, ...stored });
-
   let judges: JudgeRecord[] = [];
   let answers: AnswerRow[] = [];
   let outcome: Outcome;
   let entries;
   let stakeOutcome: Outcome;
-  if (sheet) {
-    ({ answers, sam: findings } = await judgeWorksheet(ctx, { ...sheet, age, quest }));
-    const total = worksheetVerdict(
-      answers.map((a) => a.outcome),
-      quest.points,
-    );
-    outcome = total.outcome;
-    stakeOutcome = total.stakeOutcome;
-    entries = pointsForModelVerdict(outcome, total.points);
-  } else {
-    const judgeInput = {
-      age,
-      readAloud: quest.readAloud,
-      answer: quest.answer,
-      lookFor: quest.lookFor,
-      evidence: evidence!,
-    };
-    ({ judges, outcome } = await judgePair(ctx, judgeInput, quest.recitation));
-    stakeOutcome = outcome;
-    entries = pointsForModelVerdict(outcome, quest.points);
+  try {
+    if (proof.kind === "worksheet") {
+      const photoKey = `proofs/${familyId}/${proofId}`;
+      await deps.blobs.put(photoKey, proof.bytes, proof.contentType);
+      sheet = { imageUrl: dataUrl(proof.bytes, proof.contentType), width: proof.width, height: proof.height };
+      stored = { photoKey, photoWidth: proof.width, photoHeight: proof.height };
+    } else if (proof.kind === "photo") {
+      const photoKey = `proofs/${familyId}/${proofId}`;
+      await deps.blobs.put(photoKey, proof.bytes, proof.contentType);
+      const imageUrl = dataUrl(proof.bytes, proof.contentType);
+      const results = await Promise.all(
+        quest.lookFor.map(async (l) => {
+          try {
+            const r = await segment(ctx, { phrase: l.phrase, imageUrl });
+            return { phrase: l.phrase, wanted: l.count, found: r.found, raw: r.raw };
+          } catch {
+            return null;
+          }
+        }),
+      );
+      findings = results.filter((f) => f !== null);
+      evidence = { kind: "photo", imageUrl, findings };
+      stored = { photoKey };
+    } else if (proof.kind === "voice") {
+      // The recording is passed straight through and never stored.
+      const turns = await transcribe(ctx, proof.wav);
+      evidence = { kind: "voice", turns };
+      stored = { transcript: turns };
+    } else {
+      evidence = { kind: "text", text: proof.text };
+      stored = { text: proof.text };
+    }
+    await db
+      .insert(proofs)
+      .values({ id: proofId, familyId, questId, kind: proof.kind, stakeBonus: stake, ...stored });
+
+    if (sheet) {
+      ({ answers, sam: findings } = await judgeWorksheet(ctx, { ...sheet, age, quest }));
+      const total = worksheetVerdict(
+        answers.map((a) => a.outcome),
+        quest.points,
+      );
+      outcome = total.outcome;
+      stakeOutcome = total.stakeOutcome;
+      entries = pointsForModelVerdict(outcome, total.points);
+    } else {
+      const judgeInput = {
+        age,
+        readAloud: quest.readAloud,
+        answer: quest.answer,
+        lookFor: quest.lookFor,
+        evidence: evidence!,
+      };
+      ({ judges, outcome } = await judgePair(ctx, judgeInput, quest.recitation));
+      stakeOutcome = outcome;
+      entries = pointsForModelVerdict(outcome, quest.points);
+    }
+  } catch (e) {
+    // Judging failed before a Verdict: give the chosen Stake back so the retry still carries it.
+    if (quest.stakeMultiplier !== null) {
+      await db
+        .update(quests)
+        .set({ stakeMultiplier: quest.stakeMultiplier })
+        .where(and(eq(quests.id, questId), eq(quests.familyId, familyId), isNull(quests.stakeMultiplier)));
+    }
+    throw e;
   }
 
   const now = new Date();

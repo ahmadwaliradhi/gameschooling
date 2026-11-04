@@ -6,12 +6,17 @@ type Call = Awaited<ReturnType<typeof getModelLog>>[number];
 const usd = (n: number | null) => (n === null ? "" : `$${n < 0.01 ? n.toFixed(4) : n.toFixed(3)}`);
 
 // Which models ran, what they saw, what it cost and how long it took.
-export function ModelLog(props: { of: { questId: string } | { verdictId: string } | { runId: string } }) {
+export function ModelLog(props: {
+  of: { questId: string } | { verdictId: string } | { runId: string };
+  title?: string;
+}) {
   const [calls, setCalls] = useState<Call[] | null>(null);
   const key = JSON.stringify(props.of);
   useEffect(() => {
     let live = true;
-    void getModelLog({ data: props.of }).then((c) => live && setCalls(c));
+    void getModelLog({ data: props.of })
+      .then((c) => live && setCalls(c))
+      .catch(() => live && setCalls([]));
     return () => {
       live = false;
     };
@@ -20,7 +25,8 @@ export function ModelLog(props: { of: { questId: string } | { verdictId: string 
   if (!calls || calls.length === 0) return null;
   const total = calls.reduce((s, c) => s + (c.costUsd ?? 0), 0);
   return (
-    <div className="overflow-x-auto">
+    <div className="flex flex-col gap-1 overflow-x-auto">
+      {props.title && <p className="text-xs font-medium text-muted-foreground">{props.title}</p>}
       <table className="w-full text-left text-xs">
         <tbody>
           {calls.map((c) => (

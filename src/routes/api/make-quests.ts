@@ -20,6 +20,7 @@ export const Route = createFileRoute("/api/make-quests")({
               if (next.done) controller.close();
               else controller.enqueue(encoder.encode(`${next.value}\n`));
             } catch (e) {
+              console.error("make-quests: run failed", e);
               controller.enqueue(
                 encoder.encode(`Could not make Quests: ${e instanceof Error ? e.message : e}\n`),
               );
