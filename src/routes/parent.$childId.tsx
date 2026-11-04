@@ -7,6 +7,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  STARTER_PLAN_CATEGORIES,
+  STARTER_PLAN_FOCUS_CHIPS,
+  STARTER_PLAN_TAGS,
+  filterStarterPlans,
+  type StarterPlanCategory,
+  type StarterPlanFocusChip,
+  type StarterPlanTag,
+} from "#/domain/starter-plans";
+import { ageOf } from "#/domain/quest";
 import { AnswerCrop } from "#/components/answer-crop";
 import { ChildForm } from "#/components/child-form";
 import { LocalDate } from "#/components/local-date";
@@ -600,13 +612,67 @@ function WorksheetAnswers(props: { answers: Answer[]; photoKey: string }) {
   );
 }
 
+// The tab label, and the name shown under each Starter Plan.
+const CATEGORY_LABELS: Record<StarterPlanCategory, { tab: string; name: string }> = {
+  method: { tab: "Methods", name: "Method" },
+  curriculum: { tab: "Curricula", name: "Curriculum" },
+  subject: { tab: "Subjects & skills", name: "Subject or skill" },
+  faith: { tab: "Faith", name: "Faith" },
+};
+const TAG_LABELS: Record<StarterPlanTag, string> = {
+  religion: "Religion",
+  "early-years": "Early years",
+  language: "Language",
+  outdoors: "Outdoors",
+  arts: "Arts",
+  "life-skills": "Life skills",
+  "whole-week": "Whole week",
+};
+const FOCUS_LABELS: Record<StarterPlanFocusChip, string> = { stem: "STEM", "non-stem": "Non-STEM" };
+type CategoryTab = StarterPlanCategory | "all";
+
 // Copies a Starter Plan into the Plan box, as if the Parent typed it. Nothing is saved
-// until Make quests.
+// until Make quests. Filters run in the browser on the Starter Plans in the view, and live only
+// while the dialog is open.
 function StarterPlans(props: { view: View; text: string; onUse: (text: string) => void }) {
   const [open, setOpen] = useState(false);
+  const [category, setCategory] = useState<CategoryTab>("all");
+  const [focus, setFocus] = useState<StarterPlanFocusChip | undefined>();
+  const [tags, setTags] = useState<StarterPlanTag[]>([]);
+  const [fitsOnly, setFitsOnly] = useState(true);
+  const all = props.view.starterPlans;
+  const age = ageOf(props.view.child.birthYear);
+  const plansIn = (c: CategoryTab) =>
+    filterStarterPlans(all, age, { focus, tags, fitsOnly, category: c === "all" ? undefined : c });
+  const plans = plansIn(category);
+
+  // Clearing also turns the age switch off, so the list is never empty (no Starter Plan fits
+  // a Child older than the oldest age band).
+  function reset(fits: boolean) {
+    setCategory("all");
+    setFocus(undefined);
+    setTags([]);
+    setFitsOnly(fits);
+  }
+
+  // One chip row: STEM and Non-STEM are one choice, the rest are tags that combine.
+  const chips = [...(focus ? [focus] : []), ...tags];
+  function onChips(next: string[]) {
+    const focuses = STARTER_PLAN_FOCUS_CHIPS.filter((f) => next.includes(f));
+    setFocus(focuses.find((f) => f !== focus) ?? focuses[0]);
+    setTags(STARTER_PLAN_TAGS.filter((t) => next.includes(t)));
+  }
+
   return (
     <>
-      <Button type="button" variant="outline" onClick={() => setOpen(true)}>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => {
+          reset(true);
+          setOpen(true);
+        }}
+      >
         Use a Starter Plan
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
@@ -614,37 +680,99 @@ function StarterPlans(props: { view: View; text: string; onUse: (text: string) =
           <DialogHeader>
             <DialogTitle>Starter Plans</DialogTitle>
           </DialogHeader>
-          <ul className="flex flex-col divide-y">
-            {props.view.starterPlans.map((p) => (
-              <li key={p.id} className="flex flex-col gap-2 py-3">
-                <div className="flex items-baseline gap-2">
-                  <span className="flex-1 font-medium">{p.name}</span>
-                  <span className={cn("text-xs", p.fits ? "text-foreground" : "text-muted-foreground")}>
-                    ages {p.minAge}–{p.maxAge}
-                  </span>
-                </div>
-                <p className="line-clamp-3 text-sm whitespace-pre-line text-muted-foreground">{p.text}</p>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="self-start"
-                  onClick={() => {
-                    if (
-                      props.text.trim() &&
-                      props.text !== p.text &&
-                      !confirm("Replace the text in the Plan box with this Starter Plan?")
-                    )
-                      return;
-                    props.onUse(p.text);
-                    setOpen(false);
-                  }}
-                >
-                  Use
-                </Button>
-              </li>
-            ))}
-          </ul>
+          <div className="flex min-w-0 flex-col gap-3">
+            <Tabs value={category} onValueChange={(v) => setCategory(v as CategoryTab)}>
+              <div className="-mx-1 overflow-x-auto px-1 [scrollbar-width:none]">
+                <TabsList>
+                  {(["all", ...STARTER_PLAN_CATEGORIES] as const).map((c) => (
+                    <TabsTrigger key={c} value={c} className="flex-none">
+                      {c === "all" ? "All" : CATEGORY_LABELS[c].tab}
+                      <span className="text-xs text-muted-foreground tabular-nums">{plansIn(c).length}</span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
+            </Tabs>
+            <ToggleGroup
+              type="multiple"
+              variant="outline"
+              size="sm"
+              spacing={1}
+              className="flex-wrap"
+              value={chips}
+              onValueChange={onChips}
+              aria-label="Filter Starter Plans"
+            >
+              {STARTER_PLAN_FOCUS_CHIPS.map((f) => (
+                <ToggleGroupItem key={f} value={f} className="rounded-full px-3 text-xs">
+                  {FOCUS_LABELS[f]}
+                </ToggleGroupItem>
+              ))}
+              {STARTER_PLAN_TAGS.map((t) => (
+                <ToggleGroupItem key={t} value={t} className="rounded-full px-3 text-xs">
+                  {TAG_LABELS[t]}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+            <div className="flex items-center gap-2">
+              <Switch id="starter-fits" checked={fitsOnly} onCheckedChange={setFitsOnly} />
+              <Label htmlFor="starter-fits" className="flex-1 font-normal">
+                Fits {props.view.child.nickname}'s age
+              </Label>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {plans.length} of {all.length}
+              </span>
+            </div>
+          </div>
+          {plans.length === 0 ? (
+            <div className="flex flex-col items-start gap-2 py-3">
+              <p className="text-sm text-muted-foreground">No Starter Plans match.</p>
+              <Button type="button" size="sm" variant="outline" onClick={() => reset(false)}>
+                Clear filters
+              </Button>
+            </div>
+          ) : (
+            <ul className="flex flex-col divide-y">
+              {plans.map((p) => (
+                <li key={p.id} className="flex flex-col gap-2 py-3">
+                  <div className="flex flex-col">
+                    <div className="flex items-baseline gap-2">
+                      <span className="flex-1 font-medium">{p.name}</span>
+                      <span className={cn("text-xs", p.fits ? "text-foreground" : "text-muted-foreground")}>
+                        ages {p.minAge}–{p.maxAge}
+                      </span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {[
+                        CATEGORY_LABELS[p.category].name,
+                        p.focus === "mixed" ? "STEM and Non-STEM" : FOCUS_LABELS[p.focus],
+                        ...p.tags.map((t) => TAG_LABELS[t]),
+                      ].join(" · ")}
+                    </span>
+                  </div>
+                  <p className="line-clamp-3 text-sm whitespace-pre-line text-muted-foreground">{p.text}</p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="self-start"
+                    onClick={() => {
+                      if (
+                        props.text.trim() &&
+                        props.text !== p.text &&
+                        !confirm("Replace the text in the Plan box with this Starter Plan?")
+                      )
+                        return;
+                      props.onUse(p.text);
+                      setOpen(false);
+                    }}
+                  >
+                    Use
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
         </DialogContent>
       </Dialog>
     </>
