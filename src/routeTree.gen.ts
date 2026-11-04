@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ParentRouteImport } from './routes/parent'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as ApiMakeQuestsRouteImport } from './routes/api/make-quests'
 import { Route as ApiProofRouteImport } from './routes/api/proof'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
@@ -32,6 +34,16 @@ const IndexRoute = IndexRouteImport.update({
 const ParentRoute = ParentRouteImport.update({
   id: '/parent',
   path: '/parent',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiMakeQuestsRoute = ApiMakeQuestsRouteImport.update({
@@ -98,6 +110,8 @@ const PlayChildIdPinRoute = PlayChildIdPinRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/parent': typeof ParentRouteWithChildren
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/api/make-quests': typeof ApiMakeQuestsRoute
   '/api/proof': typeof ApiProofRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -113,6 +127,8 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/api/make-quests': typeof ApiMakeQuestsRoute
   '/api/proof': typeof ApiProofRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -130,6 +146,8 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/parent': typeof ParentRouteWithChildren
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/api/make-quests': typeof ApiMakeQuestsRoute
   '/api/proof': typeof ApiProofRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -148,6 +166,8 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/parent'
+    | '/privacy'
+    | '/terms'
     | '/api/make-quests'
     | '/api/proof'
     | '/invite/$token'
@@ -163,6 +183,8 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/privacy'
+    | '/terms'
     | '/api/make-quests'
     | '/api/proof'
     | '/invite/$token'
@@ -179,6 +201,8 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/parent'
+    | '/privacy'
+    | '/terms'
     | '/api/make-quests'
     | '/api/proof'
     | '/invite/$token'
@@ -196,6 +220,8 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ParentRoute: typeof ParentRouteWithChildren
+  PrivacyRoute: typeof PrivacyRoute
+  TermsRoute: typeof TermsRoute
   ApiMakeQuestsRoute: typeof ApiMakeQuestsRoute
   ApiProofRoute: typeof ApiProofRoute
   InviteTokenRoute: typeof InviteTokenRoute
@@ -221,6 +247,20 @@ declare module '@tanstack/react-router' {
       path: '/parent'
       fullPath: '/parent'
       preLoaderRoute: typeof ParentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/make-quests': {
@@ -328,6 +368,8 @@ const ParentRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ParentRoute: ParentRouteWithChildren,
+  PrivacyRoute: PrivacyRoute,
+  TermsRoute: TermsRoute,
   ApiMakeQuestsRoute: ApiMakeQuestsRoute,
   ApiProofRoute: ApiProofRoute,
   InviteTokenRoute: InviteTokenRoute,

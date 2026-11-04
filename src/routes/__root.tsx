@@ -33,8 +33,21 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body className="min-h-dvh flex flex-col">
         <div className="flex-1 flex flex-col">{children}</div>
-        <footer className="px-4 py-3 text-center text-xs text-muted-foreground">
-          Built with Muse Spark Open
+        <footer className="flex flex-col items-center gap-1 px-4 py-3 text-center text-xs text-muted-foreground">
+          <nav className="flex gap-3">
+            <Link to="/privacy" className="hover:text-foreground">
+              Privacy Policy
+            </Link>
+            <span aria-hidden>·</span>
+            <Link to="/terms" className="hover:text-foreground">
+              Terms of Use
+            </Link>
+          </nav>
+          {/* The Muse Spark Open license requires this line to stay visible on every page. */}
+          <p>
+            Built with Muse Spark Open. Also uses Meta's Muse Wonder, Muse Spark 1.3, Muse Image, SAM 3.1 and
+            Muse Voice Transcribe.
+          </p>
         </footer>
         <Scripts />
       </body>
