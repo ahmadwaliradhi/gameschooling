@@ -45,8 +45,6 @@ function ChildPage() {
   const [nameStatus, setNameStatus] = useState<"saved" | "error" | null>(null);
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
-  // Bumped when a Starter Plan replaces the Plan, so the note shows the new text.
-  const [planVersion, setPlanVersion] = useState(0);
   // What is in the Plan box right now, saved or not.
   const planText = useRef(view.plan);
   // Saves any unsaved Plan text; resolves false if the save failed.
@@ -73,7 +71,7 @@ function ChildPage() {
           </p>
         </div>
         <PlanNote
-          key={`${view.child.id}-${planVersion}`}
+          key={view.child.id}
           childId={view.child.id}
           initial={view.plan}
           live={planText}
@@ -86,7 +84,7 @@ function ChildPage() {
           flushPlan={() => flushPlan.current()}
           planEmpty={() => !planText.current.trim()}
         >
-          <StarterPlans view={view} liveText={planText} onUse={() => setPlanVersion((v) => v + 1)} />
+          <StarterPlans view={view} liveText={planText} />
         </MakeQuests>
       </section>
       <section className="flex flex-col gap-3">
@@ -196,7 +194,8 @@ Language, e.g. English and Bahasa Indonesia
 What to avoid, e.g. no dragons or fairies
 Rewards with prices, e.g. ice cream = 100, park trip = 40`;
 
-// Autosaves as the Parent types.
+// Autosaves as the Parent types. Takes a new Plan from the server (a Starter Plan
+// was used) unless the Parent has unsaved typing.
 function PlanNote(props: {
   childId: string;
   initial: string;
@@ -226,6 +225,15 @@ function PlanNote(props: {
       return false;
     }
   };
+  const [lastInitial, setLastInitial] = useState(props.initial);
+  if (props.initial !== lastInitial) {
+    setLastInitial(props.initial);
+    if (text === saved.current) {
+      saved.current = props.initial;
+      confirmed.current = props.initial;
+      setText(props.initial);
+    }
+  }
   useEffect(() => {
     props.live.current = text;
     props.flush.current = async () => text === confirmed.current || (await save(text));
@@ -716,7 +724,7 @@ function WorksheetAnswers(props: { answers: Answer[]; photoKey: string }) {
   );
 }
 
-function StarterPlans(props: { view: View; liveText: React.RefObject<string>; onUse: () => void }) {
+function StarterPlans(props: { view: View; liveText: React.RefObject<string> }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -765,7 +773,6 @@ function StarterPlans(props: { view: View; liveText: React.RefObject<string>; on
                     try {
                       await applyStarterPlanFn({ data: { childId: props.view.child.id, starterId: p.id } });
                       await router.invalidate();
-                      props.onUse();
                       setOpen(false);
                     } catch {
                       setError("Could not use this Starter Plan. Try again.");
