@@ -1,5 +1,5 @@
 import { createFileRoute, getRouteApi, useNavigate, useRouter } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -13,6 +13,7 @@ import { LocalDate } from "#/components/local-date";
 import { ModelLog } from "#/components/model-log";
 import { ProofView, fileUrl } from "#/components/proof-view";
 import { cn } from "@/lib/utils";
+import { runs, useDraft, useRun } from "#/lib/make-quests-runs";
 import {
   decideAnswerFn,
   decideFn,
@@ -21,11 +22,9 @@ import {
   giveRewardFn,
   recordConsequenceFn,
   removeChildFn,
-  savePlanFn,
   setChildSettingsFn,
   setPinFn,
   updateChildFn,
-  applyStarterPlanFn,
 } from "#/server/fns";
 
 export const Route = createFileRoute("/parent/$childId")({
@@ -45,10 +44,6 @@ function ChildPage() {
   const [nameStatus, setNameStatus] = useState<"saved" | "error" | null>(null);
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
-  // What is in the Plan box right now, saved or not.
-  const planText = useRef(view.plan);
-  // Saves any unsaved Plan text; resolves false if the save failed.
-  const flushPlan = useRef<() => Promise<boolean>>(async () => true);
   const router = useRouter();
   const navigate = useNavigate();
   return (
@@ -70,22 +65,7 @@ function ChildPage() {
             What Quests should cover. Make quests reads this every time.
           </p>
         </div>
-        <PlanNote
-          key={view.child.id}
-          childId={view.child.id}
-          initial={view.plan}
-          live={planText}
-          flush={flushPlan}
-        />
-        <MakeQuests
-          key={view.child.id}
-          childId={view.child.id}
-          hasPlan={view.plan.trim().length > 0}
-          flushPlan={() => flushPlan.current()}
-          planEmpty={() => !planText.current.trim()}
-        >
-          <StarterPlans view={view} liveText={planText} />
-        </MakeQuests>
+        <PlanForm view={view} />
       </section>
       <section className="flex flex-col gap-3">
         <h2 className="font-medium">Quests</h2>
@@ -194,167 +174,61 @@ Language, e.g. English and Bahasa Indonesia
 What to avoid, e.g. no dragons or fairies
 Rewards with prices, e.g. ice cream = 100, park trip = 40`;
 
-// Autosaves as the Parent types. Takes a new Plan from the server (a Starter Plan
-// was used) unless the Parent has unsaved typing.
-function PlanNote(props: {
-  childId: string;
-  initial: string;
-  live: React.RefObject<string>;
-  flush: React.RefObject<() => Promise<boolean>>;
-}) {
+// The Plan box and Make quests are one form: pressing Make quests saves the box text
+// and makes Quests in one request. Typing and Starter Plans only change the box. The
+// box text and the run live in a store per Child, so switching Children keeps both.
+function PlanForm(props: { view: View }) {
+  const { view } = props;
+  const childId = view.child.id;
   const router = useRouter();
-  const [text, setText] = useState(props.initial);
-  const [status, setStatus] = useState<"saved" | "saving" | "error">("saved");
-  // The text last sent, and the text the server last confirmed.
-  const saved = useRef(props.initial);
-  const confirmed = useRef(props.initial);
-  const save = async (next: string) => {
-    saved.current = next;
-    setStatus("saving");
-    try {
-      await savePlanFn({ data: { childId: props.childId, text: next } });
-      confirmed.current = next;
-      setStatus(saved.current === next ? "saved" : "saving");
-      // Make quests and the empty-Plan hint read the saved Plan.
-      void router.invalidate();
-      return true;
-    } catch {
-      // Let blur or the next edit try again.
-      if (saved.current === next) saved.current = confirmed.current;
-      setStatus("error");
-      return false;
-    }
-  };
-  const [lastInitial, setLastInitial] = useState(props.initial);
-  if (props.initial !== lastInitial) {
-    setLastInitial(props.initial);
-    if (text === saved.current) {
-      saved.current = props.initial;
-      confirmed.current = props.initial;
-      setText(props.initial);
-    }
-  }
-  useEffect(() => {
-    props.live.current = text;
-    props.flush.current = async () => text === confirmed.current || (await save(text));
-    if (text === saved.current) {
-      // Typed back to the saved text before the save ran.
-      if (text === confirmed.current) setStatus("saved");
-      return;
-    }
-    setStatus("saving");
-    const timer = setTimeout(() => void save(text), 600);
-    return () => clearTimeout(timer);
-  }, [text, props.childId]);
+  const navigate = useNavigate();
+  const draft = useDraft(childId);
+  const run = useRun(childId);
+  const text = draft ?? view.plan;
+  const setText = (next: string) => runs.setDraft(childId, next === view.plan ? undefined : next);
+  const unsaved = draft !== undefined;
   return (
-    <div className="flex flex-col gap-1">
+    <form
+      className="flex flex-col gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void runs.start(childId, text, {
+          progress: () => router.invalidate(),
+          signedOut: () => void navigate({ to: "/" }),
+        });
+      }}
+    >
       <Textarea
         aria-label="Plan"
         placeholder={PLAN_PLACEHOLDER}
         value={text}
         onChange={(e) => setText(e.target.value)}
-        onBlur={() => {
-          if (text !== saved.current) void save(text);
-        }}
         className="min-h-48 resize-y p-4 text-base leading-relaxed md:text-base"
       />
-      <div className="flex items-center gap-2 self-end text-xs">
-        <p aria-live="polite" className={status === "error" ? "text-destructive" : "text-muted-foreground"}>
-          {status === "saving"
-            ? "Saving…"
-            : status === "error"
-              ? "Not saved. Check your connection."
-              : "Saved"}
-        </p>
-        {status === "error" && (
-          <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => void save(text)}>
-            Retry
-          </Button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function MakeQuests(props: {
-  childId: string;
-  hasPlan: boolean;
-  flushPlan: () => Promise<boolean>;
-  planEmpty: () => boolean;
-  children?: React.ReactNode;
-}) {
-  const router = useRouter();
-  const navigate = useNavigate();
-  const [lines, setLines] = useState<string[]>([]);
-  const [running, setRunning] = useState(false);
-  return (
-    <div className="flex flex-col gap-2">
+      <p aria-live="polite" className="self-end text-xs text-muted-foreground">
+        {unsaved ? "Not saved yet. Make quests saves it." : "Saved"}
+      </p>
       <div className="flex flex-wrap items-center gap-2">
         <Button
-          disabled={running || !props.hasPlan}
-          title={props.hasPlan ? undefined : "Write a Plan first"}
-          onClick={async () => {
-            setRunning(true);
-            setLines([]);
-            try {
-              // Make quests reads the saved Plan, so save what was just typed first.
-              if (!(await props.flushPlan())) {
-                setLines(["The Plan is not saved. Try again."]);
-                return;
-              }
-              if (props.planEmpty()) {
-                setLines(["Write a Plan first."]);
-                return;
-              }
-              const res = await fetch("/api/make-quests", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ childId: props.childId }),
-              });
-              if (!res.ok || !res.body) {
-                setLines([
-                  res.status === 401
-                    ? "You are signed out. Sign in again."
-                    : "Could not make Quests. Try again.",
-                ]);
-                if (res.status === 401) void navigate({ to: "/" });
-                return;
-              }
-              const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
-              let buffer = "";
-              for (;;) {
-                const { value, done } = await reader.read();
-                if (done) break;
-                buffer += value;
-                const parts = buffer.split("\n");
-                buffer = parts.pop() ?? "";
-                if (parts.length) {
-                  setLines((l) => [...l, ...parts]);
-                  if (parts.some((p) => p.startsWith("Wrote") || p.startsWith("Drew")))
-                    void router.invalidate();
-                }
-              }
-              if (buffer) setLines((l) => [...l, buffer]);
-            } catch {
-              setLines((l) => [...l, "Connection lost"]);
-            } finally {
-              setRunning(false);
-              await router.invalidate();
-            }
-          }}
+          type="submit"
+          disabled={run.running || !text.trim()}
+          title={text.trim() ? undefined : "Write a Plan first"}
         >
-          {running ? "Making quests…" : "Make quests"}
+          {run.running ? "Making quests…" : "Make quests"}
         </Button>
-        {props.children}
+        <StarterPlans view={view} text={text} onUse={setText} />
       </div>
-      {lines.length > 0 && (
+      {run.lines.length > 0 && (
         <ol aria-hidden className="flex flex-col gap-0.5 text-sm text-muted-foreground">
-          {lines.map((l, i) => (
+          {run.lines.map((l, i) => (
             <li
               key={i}
               className={cn(
-                i === lines.length - 1 && running && "animate-pulse",
-                (l.startsWith("Could not") || l === "Connection lost") && "text-destructive",
+                i === run.lines.length - 1 && run.running && "animate-pulse",
+                (l.startsWith("Could not") ||
+                  l === "Connection lost" ||
+                  l.startsWith("You are signed out")) &&
+                  "text-destructive",
               )}
             >
               {l}
@@ -363,9 +237,9 @@ function MakeQuests(props: {
         </ol>
       )}
       <p className="sr-only" aria-live="polite">
-        {lines.at(-1)}
+        {run.lines.at(-1)}
       </p>
-    </div>
+    </form>
   );
 }
 
@@ -724,32 +598,20 @@ function WorksheetAnswers(props: { answers: Answer[]; photoKey: string }) {
   );
 }
 
-function StarterPlans(props: { view: View; liveText: React.RefObject<string> }) {
-  const router = useRouter();
+// Copies a Starter Plan into the Plan box, as if the Parent typed it. Nothing is saved
+// until Make quests.
+function StarterPlans(props: { view: View; text: string; onUse: (text: string) => void }) {
   const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   return (
     <>
-      <Button variant="outline" onClick={() => setOpen(true)}>
+      <Button type="button" variant="outline" onClick={() => setOpen(true)}>
         Use a Starter Plan
       </Button>
-      <Dialog
-        open={open}
-        onOpenChange={(o) => {
-          setOpen(o);
-          setError(null);
-        }}
-      >
+      <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[80dvh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Starter Plans</DialogTitle>
           </DialogHeader>
-          {error && (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          )}
           <ul className="flex flex-col divide-y">
             {props.view.starterPlans.map((p) => (
               <li key={p.id} className="flex flex-col gap-2 py-3">
@@ -761,27 +623,22 @@ function StarterPlans(props: { view: View; liveText: React.RefObject<string> }) 
                 </div>
                 <p className="line-clamp-3 text-sm whitespace-pre-line text-muted-foreground">{p.text}</p>
                 <Button
+                  type="button"
                   size="sm"
                   variant="outline"
                   className="self-start"
-                  disabled={busy !== null}
-                  onClick={async () => {
-                    if (props.liveText.current.trim() && !confirm("Replace the Plan with this Starter Plan?"))
+                  onClick={() => {
+                    if (
+                      props.text.trim() &&
+                      props.text !== p.text &&
+                      !confirm("Replace the text in the Plan box with this Starter Plan?")
+                    )
                       return;
-                    setError(null);
-                    setBusy(p.id);
-                    try {
-                      await applyStarterPlanFn({ data: { childId: props.view.child.id, starterId: p.id } });
-                      await router.invalidate();
-                      setOpen(false);
-                    } catch {
-                      setError("Could not use this Starter Plan. Try again.");
-                    } finally {
-                      setBusy(null);
-                    }
+                    props.onUse(p.text);
+                    setOpen(false);
                   }}
                 >
-                  {busy === p.id ? "Using…" : "Use"}
+                  Use
                 </Button>
               </li>
             ))}

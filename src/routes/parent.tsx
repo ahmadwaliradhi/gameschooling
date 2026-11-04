@@ -1,10 +1,11 @@
 import { Link, Outlet, createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
-import { Gamepad2, LogOut, Plus, Users } from "lucide-react";
+import { Gamepad2, LoaderCircle, LogOut, Plus, TriangleAlert, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ChildForm } from "#/components/child-form";
 import { authClient } from "#/lib/auth-client";
+import { useRunningChildIds } from "#/lib/make-quests-runs";
 import { addChildFn, getSidebar } from "#/server/fns";
 
 export const Route = createFileRoute("/parent")({
@@ -19,6 +20,7 @@ function ParentLayout() {
   const [adding, setAdding] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState(false);
+  const running = useRunningChildIds();
   return (
     <div className="flex flex-1 flex-col md:flex-row">
       <aside className="flex shrink-0 flex-col gap-1 border-b bg-sidebar p-3 md:sticky md:top-0 md:max-h-dvh md:w-60 md:border-r md:border-b-0">
@@ -36,6 +38,15 @@ function ParentLayout() {
                 activeProps={{ className: "bg-accent font-medium" }}
               >
                 <span className="min-w-0 flex-1 truncate">{k.nickname}</span>
+                {running.includes(k.id) && (
+                  <>
+                    <LoaderCircle
+                      aria-hidden
+                      className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+                    />
+                    <span className="sr-only">, making quests</span>
+                  </>
+                )}
                 {k.needsParent && (
                   <>
                     <span
@@ -100,6 +111,7 @@ function ParentLayout() {
         </div>
       </aside>
       <main className="min-w-0 flex-1 p-4 md:p-8">
+        <RunningWarning names={kids.filter((k) => running.includes(k.id)).map((k) => k.nickname)} />
         <Outlet />
       </main>
       <Dialog open={adding} onOpenChange={setAdding}>
@@ -118,6 +130,29 @@ function ParentLayout() {
           />
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// Make quests runs in this browser tab. Say so while any run is going, on every Parent page.
+function RunningWarning(props: { names: string[] }) {
+  if (props.names.length === 0) return null;
+  const who =
+    props.names.length === 1
+      ? props.names[0]
+      : `${props.names.slice(0, -1).join(", ")} and ${props.names.at(-1)}`;
+  return (
+    <div
+      role="status"
+      className="mx-auto mb-6 flex max-w-3xl items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-50"
+    >
+      <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
+      <p>
+        <span className="font-medium">Making quests for {who}.</span> Keep this tab open until{" "}
+        {props.names.length === 1 ? "it finishes" : "they finish"}. You can switch between Children, but
+        reloading or closing this tab stops {props.names.length === 1 ? "it" : "them"}. Quests already made
+        are kept.
+      </p>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { familyWithChild, testDb } from "#/test/harness";
 import { savePlan } from "./family";
-import { starterPlansFor, applyStarterPlan } from "./starter-plans";
+import { starterPlansFor } from "./starter-plans";
 import { parentView } from "./views";
 
 describe("Starter Plans", () => {
@@ -33,7 +33,8 @@ describe("Starter Plans", () => {
     const { familyId, childId } = await familyWithChild(db);
     const [starter] = starterPlansFor(6);
 
-    await applyStarterPlan(db, familyId, childId, starter!.id);
+    // The Plan box takes the Starter Plan text; Make quests saves it like typed text.
+    await savePlan(db, familyId, childId, starter!.text);
     expect((await parentView(db, familyId, childId)).plan).toBe(starter!.text);
 
     await savePlan(db, familyId, childId, `${starter!.text}\nNo fantasy creatures.`);
