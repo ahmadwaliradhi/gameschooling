@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { deps } from "#/server/deps";
+import { parentLocked423 } from "#/server/parent-lock";
 import { parentOr401 } from "#/server/session";
 import { NotFoundError } from "#/services/deps";
 import { savePlan } from "#/services/family";
@@ -15,6 +16,8 @@ export const Route = createFileRoute("/api/make-quests")({
       POST: async ({ request }) => {
         const parent = await parentOr401(request);
         if (parent instanceof Response) return parent;
+        const locked = await parentLocked423(parent, request);
+        if (locked) return locked;
         const parsed = Body.safeParse(await request.json().catch(() => null));
         if (!parsed.success) return new Response("Bad request", { status: 400 });
         const { childId, planText } = parsed.data;

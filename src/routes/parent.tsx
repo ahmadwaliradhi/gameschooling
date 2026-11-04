@@ -1,23 +1,51 @@
 import { Link, Outlet, createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Gamepad2, LoaderCircle, LogOut, Plus, TriangleAlert, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ChildForm } from "#/components/child-form";
 import { authClient } from "#/lib/auth-client";
 import { useRunningChildIds } from "#/lib/make-quests-runs";
-import { addChildFn, getSidebar } from "#/server/fns";
+import { addChildFn, getLocksWhenHidden, getSidebar, lockParentFn } from "#/server/fns";
 
 export const Route = createFileRoute("/parent")({
-  loader: () => getSidebar(),
+  loader: async () => {
+    const [kids, locksWhenHidden] = await Promise.all([getSidebar(), getLocksWhenHidden()]);
+    return { kids, locksWhenHidden };
+  },
+  // Parent screens are never kept: not by the browser (back/forward cache) nor by the router once left.
+  headers: () => ({ "Cache-Control": "no-store" }),
+  gcTime: 0,
   component: ParentLayout,
 });
 
+// Behind a Parent PIN, Parent screens stay open only while someone is looking at them.
+function useLockWhenHidden(on: boolean) {
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!on) return;
+    const lock = () => {
+      if (document.visibilityState !== "hidden") return;
+      void lockParentFn();
+      void navigate({ to: "/play", replace: true });
+    };
+    // A page brought back from the back/forward cache asks again.
+    const restored = (e: PageTransitionEvent) => e.persisted && location.replace("/play");
+    document.addEventListener("visibilitychange", lock);
+    window.addEventListener("pageshow", restored);
+    return () => {
+      document.removeEventListener("visibilitychange", lock);
+      window.removeEventListener("pageshow", restored);
+    };
+  }, [on, navigate]);
+}
+
 function ParentLayout() {
-  const kids = Route.useLoaderData();
+  const { kids, locksWhenHidden } = Route.useLoaderData();
   const router = useRouter();
   const navigate = useNavigate();
   const [adding, setAdding] = useState(false);
+  useLockWhenHidden(locksWhenHidden);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState(false);
   const running = useRunningChildIds();

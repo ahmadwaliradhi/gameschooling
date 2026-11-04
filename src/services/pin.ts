@@ -20,7 +20,34 @@ async function hashPin(salt: string, pin: string) {
   return hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${salt}:${pin}`)));
 }
 
-async function hmac(secret: string, message: string) {
+// Shared by the Child PIN and the Parent PIN.
+export function checkPinShape(pin: string | null) {
+  if (pin !== null && !/^\d{4}$/.test(pin)) throw new PinError("A PIN is four digits");
+}
+
+// The stored form of a PIN, or null to remove it.
+export async function storedPin(pin: string | null) {
+  checkPinShape(pin);
+  if (pin === null) return null;
+  const salt = crypto.randomUUID();
+  return `${salt}:${await hashPin(salt, pin)}`;
+}
+
+export type PinState = { hash: string; failures: number; pausedUntil: Date | null };
+
+// One try at a PIN: whether it matches, and the failures and pause to store afterwards.
+export async function tryPin(state: PinState, pin: string, now: Date) {
+  if (state.pausedUntil && state.pausedUntil > now) {
+    return { ok: false as const, failures: state.failures, pausedUntil: state.pausedUntil };
+  }
+  const [salt, hash] = state.hash.split(":");
+  if ((await hashPin(salt!, pin)) === hash) return { ok: true as const, failures: 0, pausedUntil: null };
+  const failures = state.failures + 1;
+  const pausedUntil = failures >= MAX_TRIES ? new Date(now.getTime() + PAUSE_MS) : null;
+  return { ok: false as const, failures: pausedUntil ? 0 : failures, pausedUntil };
+}
+
+export async function hmac(secret: string, message: string) {
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret),
@@ -33,13 +60,12 @@ async function hmac(secret: string, message: string) {
 
 // Set, reset (a new PIN) or remove (null) a Child's PIN. Parents only.
 export async function setPin(db: Db, familyId: string, childId: string, pin: string | null) {
-  if (pin !== null && !/^\d{4}$/.test(pin)) throw new PinError("A PIN is four digits");
+  checkPinShape(pin);
   await getChild(db, familyId, childId);
-  const salt = crypto.randomUUID();
   await db
     .update(children)
     .set({
-      pinHash: pin === null ? null : `${salt}:${await hashPin(salt, pin)}`,
+      pinHash: await storedPin(pin),
       pinFailures: 0,
       pinPausedUntil: null,
     })
@@ -62,20 +88,17 @@ export async function enterPin(
   const child = await getChild(db, familyId, childId);
   const where = and(eq(children.id, childId), eq(children.familyId, familyId));
   if (!child.pinHash) return { ok: true, token: await unlockToken(input.secret, familyId, childId, now) };
-  if (child.pinPausedUntil && child.pinPausedUntil > now)
-    return { ok: false, pausedUntil: child.pinPausedUntil };
-  const [salt, hash] = child.pinHash.split(":");
-  if ((await hashPin(salt!, input.pin)) === hash) {
-    await db.update(children).set({ pinFailures: 0, pinPausedUntil: null }).where(where);
-    return { ok: true, token: await unlockToken(input.secret, familyId, childId, now) };
-  }
-  const failures = child.pinFailures + 1;
-  const pausedUntil = failures >= MAX_TRIES ? new Date(now.getTime() + PAUSE_MS) : null;
+  const tried = await tryPin(
+    { hash: child.pinHash, failures: child.pinFailures, pausedUntil: child.pinPausedUntil },
+    input.pin,
+    now,
+  );
   await db
     .update(children)
-    .set({ pinFailures: pausedUntil ? 0 : failures, pinPausedUntil: pausedUntil })
+    .set({ pinFailures: tried.failures, pinPausedUntil: tried.pausedUntil })
     .where(where);
-  return { ok: false, pausedUntil };
+  if (tried.ok) return { ok: true, token: await unlockToken(input.secret, familyId, childId, now) };
+  return { ok: false, pausedUntil: tried.pausedUntil };
 }
 
 // Whether this device may open the Child's Quests: always without a PIN, else with a live unlock.

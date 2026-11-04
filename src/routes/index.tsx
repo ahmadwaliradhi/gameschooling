@@ -2,7 +2,7 @@ import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { authClient, demoSignIn } from "#/lib/auth-client";
-import { getSignedIn } from "#/server/fns";
+import { getHome } from "#/server/fns";
 
 export const Route = createFileRoute("/")({
   // better-auth appends ?error=<code> to errorCallbackURL; a repeated key parses as an array.
@@ -10,7 +10,8 @@ export const Route = createFileRoute("/")({
     error: s.error == null || s.error === "" ? undefined : String(s.error),
   }),
   beforeLoad: async () => {
-    if (await getSignedIn()) throw redirect({ to: "/parent" });
+    const home = await getHome();
+    if (home) throw redirect({ to: home });
   },
   head: () => ({ meta: [{ title: "Sign in · GameSchooling" }] }),
   component: SignIn,
@@ -49,7 +50,7 @@ function SignIn() {
             try {
               const { error } = await authClient.signIn.social({
                 provider: "google",
-                callbackURL: "/parent",
+                callbackURL: "/",
                 errorCallbackURL: "/",
               });
               if (error) {
@@ -73,7 +74,7 @@ function SignIn() {
             setError(null);
             try {
               await demoSignIn();
-              await navigate({ to: "/parent" });
+              await navigate({ to: (await getHome()) ?? "/parent" });
             } catch {
               setError("Could not open the Demo Family. Try again.");
             } finally {

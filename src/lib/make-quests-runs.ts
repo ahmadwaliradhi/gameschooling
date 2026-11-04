@@ -49,7 +49,7 @@ export function createRuns(fetchFn: typeof fetch = (...a) => fetch(...a)) {
     async start(
       childId: string,
       planText: string,
-      on: { progress?: () => unknown; signedOut?: () => void } = {},
+      on: { progress?: () => unknown; signedOut?: () => void; locked?: () => void } = {},
     ): Promise<void> {
       if (runs.get(childId)?.running) return;
       if (!planText.trim()) {
@@ -66,9 +66,14 @@ export function createRuns(fetchFn: typeof fetch = (...a) => fetch(...a)) {
         if (!res.ok || !res.body) {
           push(
             childId,
-            res.status === 401 ? "You are signed out. Sign in again." : "Could not make Quests. Try again.",
+            res.status === 401
+              ? "You are signed out. Sign in again."
+              : res.status === 423
+                ? "Enter the Parent PIN first."
+                : "Could not make Quests. Try again.",
           );
           if (res.status === 401) on.signedOut?.();
+          if (res.status === 423) on.locked?.();
           return;
         }
         // The server has the Plan now: load it, then let the box show it again.

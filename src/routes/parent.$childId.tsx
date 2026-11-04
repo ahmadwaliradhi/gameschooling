@@ -28,6 +28,7 @@ import {
 } from "#/server/fns";
 
 export const Route = createFileRoute("/parent/$childId")({
+  gcTime: 0,
   loader: ({ params }) => getParentChild({ data: { childId: params.childId } }),
   head: ({ loaderData }) => ({
     meta: [{ title: `${loaderData?.child.nickname ?? "Child"} · GameSchooling` }],
@@ -195,6 +196,7 @@ function PlanForm(props: { view: View }) {
         void runs.start(childId, text, {
           progress: () => router.invalidate(),
           signedOut: () => void navigate({ to: "/" }),
+          locked: () => void navigate({ to: "/parent-pin" }),
         });
       }}
     >
@@ -655,7 +657,7 @@ const parentRoute = getRouteApi("/parent");
 function ChildSettings(props: { view: View }) {
   const router = useRouter();
   const { child, demo } = props.view;
-  const kids = parentRoute.useLoaderData();
+  const { kids } = parentRoute.useLoaderData();
   const [pin, setPin] = useState("");
   const [pinError, setPinError] = useState<string | null>(null);
   const [pinSaved, setPinSaved] = useState<string | null>(null);

@@ -4,6 +4,7 @@ Use these words in code, tests, issues and UI. Capitalised in prose.
 
 - **Family**: the unit that owns all data. Every row carries `family_id`.
 - **Parent**: a signed-in adult (Google, or the shared Demo Parent). One Family per Parent; a Family may have several Parents, all equal, joined by a single-use invite.
+- **Parent PIN**: an optional 4-digit PIN for the whole Family, set on the Family page and shared by every Parent. When set, Parent screens ask for it on this device; it opens them for 30 minutes, and going to Play or leaving the tab locks them again. A Google sign-in from the last 5 minutes gets past a forgotten Parent PIN.
 - **Child**: a member of the Family with a nickname and birth year only. No account; plays on the Parent's device, optionally behind a 4-digit **PIN**.
 - **Plan**: one free-text note per Child: what to learn, in what language, what to avoid, and Rewards with prices.
 - **Starter Plan**: a ready-made Plan text a Parent copies into a Plan and edits freely. No link is kept.
