@@ -50,16 +50,10 @@ describe("Starter Plans", () => {
   });
 
   it("labels every Starter Plan, and marks religion on exactly the faith plans", () => {
-    const categories = ["method", "curriculum", "subject", "faith"];
-    const focuses = ["stem", "non-stem", "mixed"];
-    const tags = ["religion", "early-years", "language", "outdoors", "arts", "life-skills", "whole-week"];
     const plans = starterPlansFor(8);
     expect(new Set(plans.map((p) => p.id)).size).toBe(plans.length);
     for (const p of plans) {
       expect(p.minAge).toBeLessThanOrEqual(p.maxAge);
-      expect(categories).toContain(p.category);
-      expect(focuses).toContain(p.focus);
-      for (const t of p.tags) expect(tags).toContain(t);
       expect(p.tags.includes("religion")).toBe(p.category === "faith");
       expect(p.lang).toMatch(/^[a-z]{2}$/);
     }

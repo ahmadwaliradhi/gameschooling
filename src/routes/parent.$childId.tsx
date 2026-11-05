@@ -11,6 +11,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   STARTER_PLAN_CATEGORIES,
+  STARTER_PLAN_FOCUSES,
+  STARTER_PLAN_TAGS,
   type StarterPlanCategory,
   type StarterPlanTag,
 } from "#/content/starter-plans";
@@ -606,65 +608,37 @@ function WorksheetAnswers(props: { answers: Answer[]; photoKey: string }) {
   );
 }
 
-const CATEGORY_LABELS: Record<StarterPlanCategory, string> = {
-  method: "Methods",
-  curriculum: "Curricula",
-  subject: "Subjects & skills",
-  faith: "Faith",
-};
-const TAG_LABELS: Record<StarterPlanTag, string> = {
-  religion: "Religion",
-  "early-years": "Early years",
-  language: "Language",
-  outdoors: "Outdoors",
-  arts: "Arts",
-  "life-skills": "Life skills",
-  "whole-week": "Whole week",
-};
-// Chip values: the two focus chips (mutually exclusive) and every tag.
-type Chip = "stem" | "non-stem" | StarterPlanTag;
-const CHIP_LABELS: Record<Chip, string> = { stem: "STEM", "non-stem": "Non-STEM", ...TAG_LABELS };
+const CATEGORY_TABS = ["all", ...Object.keys(STARTER_PLAN_CATEGORIES)] as ("all" | StarterPlanCategory)[];
 
 // Copies a Starter Plan into the Plan box, as if the Parent typed it. Nothing is saved
 // until Make quests. Tabs, chips and the age switch only narrow the list; they reset on open.
 function StarterPlans(props: { view: View; text: string; onUse: (text: string) => void }) {
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState<"all" | StarterPlanCategory>("all");
-  const [chips, setChips] = useState<Chip[]>([]);
+  const [focus, setFocus] = useState<"stem" | "non-stem" | undefined>();
+  const [tags, setTags] = useState<StarterPlanTag[]>([]);
   const [fitsOnly, setFitsOnly] = useState(true);
   const all = props.view.starterPlans;
 
-  const focus = chips.find((c): c is "stem" | "non-stem" => c === "stem" || c === "non-stem");
-  const tags = chips.filter((c): c is StarterPlanTag => c !== "stem" && c !== "non-stem");
-  const shown = filterStarterPlans(all, {
-    category: category === "all" ? undefined : category,
+  const filterFor = (c: "all" | StarterPlanCategory) => ({
+    category: c === "all" ? undefined : c,
     focus,
     tags,
     fitsOnly,
   });
-  const countIn = (c: "all" | StarterPlanCategory) =>
-    filterStarterPlans(all, { category: c === "all" ? undefined : c, focus, tags, fitsOnly }).length;
+  const shown = filterStarterPlans(all, filterFor(category));
 
-  const reset = () => {
+  // Opening starts from "fits the Child's age"; Clear filters also drops that switch, so a
+  // Child outside every plan's age band is never left on an empty list.
+  const reset = (fits: boolean) => {
     setCategory("all");
-    setChips([]);
-    setFitsOnly(true);
+    setFocus(undefined);
+    setTags([]);
+    setFitsOnly(fits);
   };
   const onOpenChange = (next: boolean) => {
-    if (next) reset();
+    if (next) reset(true);
     setOpen(next);
-  };
-  // STEM and Non-STEM cannot both be on: picking one drops the other.
-  const onChips = (next: string[]) => {
-    const picked = next as Chip[];
-    const added = picked.find((c) => !chips.includes(c));
-    setChips(
-      added === "stem"
-        ? picked.filter((c) => c !== "non-stem")
-        : added === "non-stem"
-          ? picked.filter((c) => c !== "stem")
-          : picked,
-    );
   };
 
   return (
@@ -680,30 +654,50 @@ function StarterPlans(props: { view: View; text: string; onUse: (text: string) =
           <Tabs value={category} onValueChange={(v) => setCategory(v as "all" | StarterPlanCategory)}>
             {/* One row that scrolls sideways on a phone, so the pill never breaks. */}
             <TabsList className="w-full justify-start overflow-x-auto">
-              {(["all", ...STARTER_PLAN_CATEGORIES] as const).map((c) => (
+              {CATEGORY_TABS.map((c) => (
                 <TabsTrigger key={c} value={c} className="shrink-0 text-xs">
-                  {c === "all" ? "All" : CATEGORY_LABELS[c]}
-                  <span className="text-muted-foreground tabular-nums">{countIn(c)}</span>
+                  {c === "all" ? "All" : STARTER_PLAN_CATEGORIES[c]}
+                  <span className="text-muted-foreground tabular-nums">
+                    {filterStarterPlans(all, filterFor(c)).length}
+                  </span>
                 </TabsTrigger>
               ))}
             </TabsList>
           </Tabs>
-          <ToggleGroup
-            type="multiple"
-            value={chips}
-            onValueChange={onChips}
-            size="sm"
-            variant="outline"
-            spacing={1}
-            className="flex-wrap justify-start"
-            aria-label="Narrow the Starter Plans"
-          >
-            {(Object.keys(CHIP_LABELS) as Chip[]).map((c) => (
-              <ToggleGroupItem key={c} value={c} className="h-7 rounded-full px-2.5 text-xs">
-                {CHIP_LABELS[c]}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
+          {/* STEM and Non-STEM are one single-choice group, so they can never both be on. */}
+          <div className="flex flex-wrap gap-1">
+            <ToggleGroup
+              type="single"
+              value={focus ?? ""}
+              onValueChange={(v) => setFocus(v === "" ? undefined : (v as "stem" | "non-stem"))}
+              size="sm"
+              variant="outline"
+              spacing={1}
+              aria-label="STEM or Non-STEM"
+            >
+              {(["stem", "non-stem"] as const).map((f) => (
+                <ToggleGroupItem key={f} value={f} className="h-7 rounded-full px-2.5 text-xs">
+                  {STARTER_PLAN_FOCUSES[f][0]}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+            <ToggleGroup
+              type="multiple"
+              value={tags}
+              onValueChange={(v) => setTags(v as StarterPlanTag[])}
+              size="sm"
+              variant="outline"
+              spacing={1}
+              className="flex-wrap justify-start"
+              aria-label="Narrow the Starter Plans"
+            >
+              {(Object.keys(STARTER_PLAN_TAGS) as StarterPlanTag[]).map((t) => (
+                <ToggleGroupItem key={t} value={t} className="h-7 rounded-full px-2.5 text-xs">
+                  {STARTER_PLAN_TAGS[t]}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          </div>
           <div className="flex items-center gap-2 text-sm">
             <Switch id="fits-only" checked={fitsOnly} onCheckedChange={setFitsOnly} />
             <Label htmlFor="fits-only">Fits {props.view.child.nickname}'s age</Label>
@@ -714,7 +708,7 @@ function StarterPlans(props: { view: View; text: string; onUse: (text: string) =
           {shown.length === 0 ? (
             <div className="flex flex-col items-start gap-2 py-6 text-sm text-muted-foreground">
               <p>No Starter Plans match.</p>
-              <Button type="button" size="sm" variant="outline" onClick={reset}>
+              <Button type="button" size="sm" variant="outline" onClick={() => reset(false)}>
                 Clear filters
               </Button>
             </div>
@@ -729,10 +723,11 @@ function StarterPlans(props: { view: View; text: string; onUse: (text: string) =
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {[CATEGORY_LABELS[p.category], CHIP_LABELS[p.focus === "mixed" ? "stem" : p.focus]]
-                      .concat(p.focus === "mixed" ? ["Non-STEM"] : [])
-                      .concat(p.tags.map((t) => TAG_LABELS[t]))
-                      .join(" · ")}
+                    {[
+                      STARTER_PLAN_CATEGORIES[p.category],
+                      ...STARTER_PLAN_FOCUSES[p.focus],
+                      ...p.tags.map((t) => STARTER_PLAN_TAGS[t]),
+                    ].join(" · ")}
                   </p>
                   <p className="line-clamp-3 text-sm whitespace-pre-line text-muted-foreground">{p.text}</p>
                   <Button

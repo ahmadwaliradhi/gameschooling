@@ -168,7 +168,7 @@ Each block is ready to paste into `STARTER_PLANS` once the type gains `category`
   focus: "mixed",
   tags: ["early-years", "life-skills", "whole-week"],
   lang: "en",
-  text: `Montessori style: real tasks, the child chooses, hands before words.
+  text: `Montessori style: real work, the child chooses, hands before words.
 Practical life: pour water between two jugs, then wipe up any spill without help.
 Senses: sort ten things at home from lightest to heaviest, then smallest to biggest.
 Maths: build numbers 1 to 10 with beads or pasta, then match each to its written number.

@@ -3,30 +3,36 @@
 
 // What kind of thing a Starter Plan is: a teaching philosophy, a national curriculum, one
 // subject or skill, or faith learning. Exactly one per plan; the dialog shows them as tabs.
-export type StarterPlanCategory = "method" | "curriculum" | "subject" | "faith";
-export const STARTER_PLAN_CATEGORIES: StarterPlanCategory[] = ["method", "curriculum", "subject", "faith"];
+export const STARTER_PLAN_CATEGORIES = {
+  method: "Methods",
+  curriculum: "Curricula",
+  subject: "Subjects & skills",
+  faith: "Faith",
+} as const;
+export type StarterPlanCategory = keyof typeof STARTER_PLAN_CATEGORIES;
 
 // "mixed" is a broad week that does both; a STEM filter matches stem + mixed, Non-STEM matches
 // non-stem + mixed, so that whole-week plans do not swamp either filter.
-export type StarterPlanFocus = "stem" | "non-stem" | "mixed";
+export const STARTER_PLAN_FOCUSES = {
+  stem: ["STEM"],
+  "non-stem": ["Non-STEM"],
+  mixed: ["STEM", "Non-STEM"],
+} as const;
+export type StarterPlanFocus = keyof typeof STARTER_PLAN_FOCUSES;
 
-export type StarterPlanTag =
-  | "religion" // always on faith plans, kept as a tag so a cross-category plan can carry it
-  | "early-years"
-  | "language" // teaches a language or script, or the text is not in English
-  | "outdoors"
-  | "arts"
-  | "life-skills"
-  | "whole-week";
-export const STARTER_PLAN_TAGS: StarterPlanTag[] = [
-  "religion",
-  "early-years",
-  "language",
-  "outdoors",
-  "arts",
-  "life-skills",
-  "whole-week",
-];
+// Zero or more per plan; the dialog shows them as chips. "religion" is always on faith plans,
+// kept as a tag so a cross-category plan can carry it. "language" means the plan teaches a
+// language or script, or its text is not in English.
+export const STARTER_PLAN_TAGS = {
+  religion: "Religion",
+  "early-years": "Early years",
+  language: "Language",
+  outdoors: "Outdoors",
+  arts: "Arts",
+  "life-skills": "Life skills",
+  "whole-week": "Whole week",
+} as const;
+export type StarterPlanTag = keyof typeof STARTER_PLAN_TAGS;
 
 export type StarterPlan = {
   id: string;
@@ -164,7 +170,7 @@ Hadiah: es krim = 100, ke taman = 40, stiker = 15`,
     focus: "mixed",
     tags: ["early-years", "life-skills", "whole-week"],
     lang: "en",
-    text: `Montessori style: real tasks, the child chooses, hands before words.
+    text: `Montessori style: real work, the child chooses, hands before words.
 Practical life: pour water between two jugs, then wipe up any spill without help.
 Senses: sort ten things at home from lightest to heaviest, then smallest to biggest.
 Maths: build numbers 1 to 10 with beads or pasta, then match each to its written number.
