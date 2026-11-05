@@ -22,7 +22,8 @@ export type StarterPlanFocus = keyof typeof STARTER_PLAN_FOCUSES;
 
 // Zero or more per plan; the dialog shows them as chips. "religion" is always on faith plans,
 // kept as a tag so a cross-category plan can carry it. "language" means the plan teaches a
-// language or script, or its text is not in English.
+// language or script, or its text is not in English. "university" means the plan prepares for
+// university entrance: a test, a qualifying route, or the application itself.
 export const STARTER_PLAN_TAGS = {
   religion: "Religion",
   "early-years": "Early years",
@@ -31,7 +32,7 @@ export const STARTER_PLAN_TAGS = {
   arts: "Arts",
   "life-skills": "Life skills",
   "whole-week": "Whole week",
-  university: "University", // prepares for university entrance: a test, a qualifying route, or the application
+  university: "University",
 } as const;
 export type StarterPlanTag = keyof typeof STARTER_PLAN_TAGS;
 
@@ -693,6 +694,7 @@ Math: redo every missed question from the last module without a calculator first
 Words: collect ten unfamiliar words from this week's passages and use each in a sentence.
 Calendar: find the next test date and its registration deadline on the College Board site and tell a Parent both.
 Language: English.
+Homeschoolers register themselves at My SAT and enter the homeschool code 970000; no school is needed.
 Practice comes from College Board and Khan Academy only. No question banks copied into Quests. A Parent reads the score report with the Child, not instead of them.
 Rewards: choose the weekend outing = 60, new book or album = 80, friends over for pizza = 150`,
   },
@@ -731,7 +733,7 @@ Learn: watch one AP Daily video for this week's topic and write a half-page summ
 Practise: do one set of practice questions for the topic and mark them yourself; redo any you got wrong.
 Review: once a week, explain last week's topic to a Parent in five minutes without notes.
 Language: English.
-The exam is ordered through a school, never by a parent. Keep the deadline on the fridge.
+The exam is ordered through a school, never by a Parent. Keep the deadline on the fridge.
 Rewards: choose the weekend outing = 60, new book or album = 80, day trip = 150`,
   },
   {
@@ -820,7 +822,7 @@ Hadiah: pilih acara akhir pekan = 60, buku baru = 80, jalan-jalan sehari = 150`,
     lang: "en",
     text: `Finishing Class 12 through NIOS (open schooling) and preparing for CUET-UG, the central universities' entrance test.
 Admission: check the NIOS admission block that is open now and the age cut-off, and tell a Parent the last date.
-Five subjects: (write the NIOS subjects here). Do one lesson from one subject each day and keep a page of notes per lesson.
+Five subjects: (write the NIOS subjects here). Do one chapter from one subject each day and keep a page of notes per chapter.
 Practice: take one mock paper on the NTA Test Practice Centre for one CUET subject and photograph the result.
 Language paper: read one editorial and write its argument in five sentences.
 Aptitude: do 20 reasoning and numeracy questions under time and redo the misses.
@@ -864,7 +866,7 @@ Reference: list two adults who could write a reference (a tutor, a coach, an emp
 Interview: answer three subject questions aloud for a Parent, thinking out loud as you go; record it.
 Money: find one scholarship or student-finance scheme you qualify for and write down its deadline and what it asks for.
 Language: English.
-UCAS asks three set questions; Common App asks one essay from a set of prompts. Homeschoolers apply independently (UCAS) or with a parent as counselor (Common App).
+UCAS asks three set questions; Common App asks one essay from a set of prompts. Homeschoolers apply independently (UCAS) or with a Parent as counselor (Common App).
 Rewards: choose the weekend outing = 60, new book = 80, meal out with friends = 150`,
   },
   {

@@ -5,7 +5,7 @@ import { starterPlansFor } from "./starter-plans";
 import { parentView } from "./views";
 
 describe("Starter Plans", () => {
-  it("covers every approach the spec names", () => {
+  it("covers every approach the Starter Plan research names", () => {
     const names = starterPlansFor(8).map((p) => p.name);
     for (const approach of [
       "Singapore Math",
