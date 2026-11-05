@@ -3,6 +3,7 @@ import { ChildForm } from "#/components/child-form";
 import { addChildFn, getSidebar } from "#/server/fns";
 
 export const Route = createFileRoute("/parent/")({
+  gcTime: 0,
   loader: async () => {
     const [first] = await getSidebar();
     if (first) throw redirect({ to: "/parent/$childId", params: { childId: first.id } });

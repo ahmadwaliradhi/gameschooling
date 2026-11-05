@@ -1,52 +1,7 @@
 // Ready-made Plan texts a Parent copies into a Child's Plan and edits freely. Each one describes an
 // approach in our own words: no course content, books or worksheets are copied in.
 
-// What kind of thing a Starter Plan is: a teaching philosophy, a national curriculum, one
-// subject or skill, or faith learning. Exactly one per plan; the dialog shows them as tabs.
-export const STARTER_PLAN_CATEGORIES = {
-  method: "Methods",
-  curriculum: "Curricula",
-  subject: "Subjects & skills",
-  faith: "Faith",
-} as const;
-export type StarterPlanCategory = keyof typeof STARTER_PLAN_CATEGORIES;
-
-// "mixed" is a broad week that does both; a STEM filter matches stem + mixed, Non-STEM matches
-// non-stem + mixed, so that whole-week plans do not swamp either filter.
-export const STARTER_PLAN_FOCUSES = {
-  stem: ["STEM"],
-  "non-stem": ["Non-STEM"],
-  mixed: ["STEM", "Non-STEM"],
-} as const;
-export type StarterPlanFocus = keyof typeof STARTER_PLAN_FOCUSES;
-
-// Zero or more per plan; the dialog shows them as chips. "religion" is always on faith plans,
-// kept as a tag so a cross-category plan can carry it. "language" means the plan teaches a
-// language or script, or its text is not in English. "university" means the plan prepares for
-// university entrance: a test, a qualifying route, or the application itself.
-export const STARTER_PLAN_TAGS = {
-  religion: "Religion",
-  "early-years": "Early years",
-  language: "Language",
-  outdoors: "Outdoors",
-  arts: "Arts",
-  "life-skills": "Life skills",
-  "whole-week": "Whole week",
-  university: "University",
-} as const;
-export type StarterPlanTag = keyof typeof STARTER_PLAN_TAGS;
-
-export type StarterPlan = {
-  id: string;
-  name: string;
-  minAge: number;
-  maxAge: number;
-  category: StarterPlanCategory;
-  focus: StarterPlanFocus;
-  tags: StarterPlanTag[];
-  lang: string; // the language the text is written in, BCP-47 ("en", "id")
-  text: string;
-};
+import type { StarterPlan } from "#/domain/starter-plans";
 
 export const STARTER_PLANS: StarterPlan[] = [
   {

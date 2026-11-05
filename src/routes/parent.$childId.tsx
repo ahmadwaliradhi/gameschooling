@@ -11,12 +11,14 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   STARTER_PLAN_CATEGORIES,
-  STARTER_PLAN_FOCUSES,
+  STARTER_PLAN_FOCUS_CHIPS,
   STARTER_PLAN_TAGS,
+  filterStarterPlans,
   type StarterPlanCategory,
+  type StarterPlanFocusChip,
   type StarterPlanTag,
-} from "#/content/starter-plans";
-import { filterStarterPlans } from "#/services/starter-plans";
+} from "#/domain/starter-plans";
+import { ageOf } from "#/domain/quest";
 import { AnswerCrop } from "#/components/answer-crop";
 import { ChildForm } from "#/components/child-form";
 import { LocalDate } from "#/components/local-date";
@@ -38,6 +40,7 @@ import {
 } from "#/server/fns";
 
 export const Route = createFileRoute("/parent/$childId")({
+  gcTime: 0,
   loader: ({ params }) => getParentChild({ data: { childId: params.childId } }),
   head: ({ loaderData }) => ({
     meta: [{ title: `${loaderData?.child.nickname ?? "Child"} · GameSchooling` }],
@@ -205,6 +208,7 @@ function PlanForm(props: { view: View }) {
         void runs.start(childId, text, {
           progress: () => router.invalidate(),
           signedOut: () => void navigate({ to: "/" }),
+          locked: () => void navigate({ to: "/parent-pin" }),
         });
       }}
     >
@@ -608,127 +612,145 @@ function WorksheetAnswers(props: { answers: Answer[]; photoKey: string }) {
   );
 }
 
-const CATEGORY_TABS = ["all", ...Object.keys(STARTER_PLAN_CATEGORIES)] as ("all" | StarterPlanCategory)[];
+// The tab label, and the name shown under each Starter Plan.
+const CATEGORY_LABELS: Record<StarterPlanCategory, { tab: string; name: string }> = {
+  method: { tab: "Methods", name: "Method" },
+  curriculum: { tab: "Curricula", name: "Curriculum" },
+  subject: { tab: "Subjects & skills", name: "Subject or skill" },
+  faith: { tab: "Faith", name: "Faith" },
+};
+const TAG_LABELS: Record<StarterPlanTag, string> = {
+  religion: "Religion",
+  "early-years": "Early years",
+  language: "Language",
+  outdoors: "Outdoors",
+  arts: "Arts",
+  "life-skills": "Life skills",
+  "whole-week": "Whole week",
+  university: "University",
+};
+const FOCUS_LABELS: Record<StarterPlanFocusChip, string> = { stem: "STEM", "non-stem": "Non-STEM" };
+type CategoryTab = StarterPlanCategory | "all";
 
 // Copies a Starter Plan into the Plan box, as if the Parent typed it. Nothing is saved
-// until Make quests. Tabs, chips and the age switch only narrow the list; they reset on open.
+// until Make quests. Filters run in the browser on the Starter Plans in the view, and live only
+// while the dialog is open.
 function StarterPlans(props: { view: View; text: string; onUse: (text: string) => void }) {
   const [open, setOpen] = useState(false);
-  const [category, setCategory] = useState<"all" | StarterPlanCategory>("all");
-  const [focus, setFocus] = useState<"stem" | "non-stem" | undefined>();
+  const [category, setCategory] = useState<CategoryTab>("all");
+  const [focus, setFocus] = useState<StarterPlanFocusChip | undefined>();
   const [tags, setTags] = useState<StarterPlanTag[]>([]);
   const [fitsOnly, setFitsOnly] = useState(true);
   const all = props.view.starterPlans;
+  const age = ageOf(props.view.child.birthYear);
+  const plansIn = (c: CategoryTab) =>
+    filterStarterPlans(all, age, { focus, tags, fitsOnly, category: c === "all" ? undefined : c });
+  const plans = plansIn(category);
 
-  const filterFor = (c: "all" | StarterPlanCategory) => ({
-    category: c === "all" ? undefined : c,
-    focus,
-    tags,
-    fitsOnly,
-  });
-  const shown = filterStarterPlans(all, filterFor(category));
-
-  // Opening starts from "fits the Child's age"; Clear filters also drops that switch, so a
-  // Child outside every plan's age band is never left on an empty list.
-  const reset = (fits: boolean) => {
+  // Clearing also turns the age switch off, so the list is never empty (no Starter Plan fits
+  // a Child older than the oldest age band).
+  function reset(fits: boolean) {
     setCategory("all");
     setFocus(undefined);
     setTags([]);
     setFitsOnly(fits);
-  };
-  const onOpenChange = (next: boolean) => {
-    if (next) reset(true);
-    setOpen(next);
-  };
+  }
+
+  // One chip row: STEM and Non-STEM are one choice, the rest are tags that combine.
+  const chips = [...(focus ? [focus] : []), ...tags];
+  function onChips(next: string[]) {
+    const focuses = STARTER_PLAN_FOCUS_CHIPS.filter((f) => next.includes(f));
+    setFocus(focuses.find((f) => f !== focus) ?? focuses[0]);
+    setTags(STARTER_PLAN_TAGS.filter((t) => next.includes(t)));
+  }
 
   return (
     <>
-      <Button type="button" variant="outline" onClick={() => onOpenChange(true)}>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => {
+          reset(true);
+          setOpen(true);
+        }}
+      >
         Use a Starter Plan
       </Button>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="flex max-h-[85dvh] flex-col gap-3 sm:max-w-lg">
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[80dvh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Starter Plans</DialogTitle>
           </DialogHeader>
-          <Tabs value={category} onValueChange={(v) => setCategory(v as "all" | StarterPlanCategory)}>
-            {/* One row that scrolls sideways on a phone, so the pill never breaks. */}
-            <TabsList className="w-full justify-start overflow-x-auto">
-              {CATEGORY_TABS.map((c) => (
-                <TabsTrigger key={c} value={c} className="shrink-0 text-xs">
-                  {c === "all" ? "All" : STARTER_PLAN_CATEGORIES[c]}
-                  <span className="text-muted-foreground tabular-nums">
-                    {filterStarterPlans(all, filterFor(c)).length}
-                  </span>
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-          {/* STEM and Non-STEM are one single-choice group, so they can never both be on. */}
-          <div className="flex flex-wrap gap-1">
-            <ToggleGroup
-              type="single"
-              value={focus ?? ""}
-              onValueChange={(v) => setFocus(v === "" ? undefined : (v as "stem" | "non-stem"))}
-              size="sm"
-              variant="outline"
-              spacing={1}
-              aria-label="STEM or Non-STEM"
-            >
-              {(["stem", "non-stem"] as const).map((f) => (
-                <ToggleGroupItem key={f} value={f} className="h-7 rounded-full px-2.5 text-xs">
-                  {STARTER_PLAN_FOCUSES[f][0]}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
+          <div className="flex min-w-0 flex-col gap-3">
+            <Tabs value={category} onValueChange={(v) => setCategory(v as CategoryTab)}>
+              <div className="-mx-1 overflow-x-auto px-1 [scrollbar-width:none]">
+                <TabsList>
+                  {(["all", ...STARTER_PLAN_CATEGORIES] as const).map((c) => (
+                    <TabsTrigger key={c} value={c} className="flex-none">
+                      {c === "all" ? "All" : CATEGORY_LABELS[c].tab}
+                      <span className="text-xs text-muted-foreground tabular-nums">{plansIn(c).length}</span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
+            </Tabs>
             <ToggleGroup
               type="multiple"
-              value={tags}
-              onValueChange={(v) => setTags(v as StarterPlanTag[])}
-              size="sm"
               variant="outline"
+              size="sm"
               spacing={1}
-              className="flex-wrap justify-start"
-              aria-label="Narrow the Starter Plans"
+              className="flex-wrap"
+              value={chips}
+              onValueChange={onChips}
+              aria-label="Filter Starter Plans"
             >
-              {(Object.keys(STARTER_PLAN_TAGS) as StarterPlanTag[]).map((t) => (
-                <ToggleGroupItem key={t} value={t} className="h-7 rounded-full px-2.5 text-xs">
-                  {STARTER_PLAN_TAGS[t]}
+              {STARTER_PLAN_FOCUS_CHIPS.map((f) => (
+                <ToggleGroupItem key={f} value={f} className="rounded-full px-3 text-xs">
+                  {FOCUS_LABELS[f]}
+                </ToggleGroupItem>
+              ))}
+              {STARTER_PLAN_TAGS.map((t) => (
+                <ToggleGroupItem key={t} value={t} className="rounded-full px-3 text-xs">
+                  {TAG_LABELS[t]}
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
+            <div className="flex items-center gap-2">
+              <Switch id="starter-fits" checked={fitsOnly} onCheckedChange={setFitsOnly} />
+              <Label htmlFor="starter-fits" className="flex-1 font-normal">
+                Fits {props.view.child.nickname}'s age
+              </Label>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {plans.length} of {all.length}
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-2 text-sm">
-            <Switch id="fits-only" checked={fitsOnly} onCheckedChange={setFitsOnly} />
-            <Label htmlFor="fits-only">Fits {props.view.child.nickname}'s age</Label>
-            <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-              {shown.length} of {all.length}
-            </span>
-          </div>
-          {shown.length === 0 ? (
-            <div className="flex flex-col items-start gap-2 py-6 text-sm text-muted-foreground">
-              <p>No Starter Plans match.</p>
+          {plans.length === 0 ? (
+            <div className="flex flex-col items-start gap-2 py-3">
+              <p className="text-sm text-muted-foreground">No Starter Plans match.</p>
               <Button type="button" size="sm" variant="outline" onClick={() => reset(false)}>
                 Clear filters
               </Button>
             </div>
           ) : (
-            <ul className="-mx-1 flex min-h-0 flex-col divide-y overflow-y-auto px-1">
-              {shown.map((p) => (
+            <ul className="flex flex-col divide-y">
+              {plans.map((p) => (
                 <li key={p.id} className="flex flex-col gap-2 py-3">
-                  <div className="flex items-baseline gap-2">
-                    <span className="flex-1 font-medium">{p.name}</span>
-                    <span className={cn("text-xs", p.fits ? "text-foreground" : "text-muted-foreground")}>
-                      ages {p.minAge}–{p.maxAge}
+                  <div className="flex flex-col">
+                    <div className="flex items-baseline gap-2">
+                      <span className="flex-1 font-medium">{p.name}</span>
+                      <span className={cn("text-xs", p.fits ? "text-foreground" : "text-muted-foreground")}>
+                        ages {p.minAge}–{p.maxAge}
+                      </span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {[
+                        CATEGORY_LABELS[p.category].name,
+                        p.focus === "mixed" ? "STEM and Non-STEM" : FOCUS_LABELS[p.focus],
+                        ...p.tags.map((t) => TAG_LABELS[t]),
+                      ].join(" · ")}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {[
-                      STARTER_PLAN_CATEGORIES[p.category],
-                      ...STARTER_PLAN_FOCUSES[p.focus],
-                      ...p.tags.map((t) => STARTER_PLAN_TAGS[t]),
-                    ].join(" · ")}
-                  </p>
                   <p className="line-clamp-3 text-sm whitespace-pre-line text-muted-foreground">{p.text}</p>
                   <Button
                     type="button"
@@ -764,7 +786,7 @@ const parentRoute = getRouteApi("/parent");
 function ChildSettings(props: { view: View }) {
   const router = useRouter();
   const { child, demo } = props.view;
-  const kids = parentRoute.useLoaderData();
+  const { kids } = parentRoute.useLoaderData();
   const [pin, setPin] = useState("");
   const [pinError, setPinError] = useState<string | null>(null);
   const [pinSaved, setPinSaved] = useState<string | null>(null);

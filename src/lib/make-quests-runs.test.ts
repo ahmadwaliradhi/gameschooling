@@ -97,4 +97,13 @@ describe("Make quests runs", () => {
     expect(runs.runningIds()).toBe("");
     expect(runs.unsafeToLeave()).toBe(false);
   });
+
+  it("sends the Parent to the Parent PIN pad when Parent screens have locked", async () => {
+    const runs = createRuns((async () => new Response("Parent PIN needed", { status: 423 })) as typeof fetch);
+    let locked = false;
+    await runs.start("a", "Plan A", { locked: () => void (locked = true) });
+
+    expect(runs.run("a")).toEqual({ lines: ["Enter the Parent PIN first."], running: false });
+    expect(locked).toBe(true);
+  });
 });

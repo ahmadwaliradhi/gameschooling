@@ -859,3 +859,4 @@ Rewards: masjid trip = 60, dates and milk treat = 20`,
 - [S27] The Quran, Sahih International translation via api.alquran.cloud (5:6, 17:23-24, 31:13-19, 33:21, 49:11, 68:4), readable at https://quran.com/5/6 , https://quran.com/17/23-24 , https://quran.com/31/13-19 , https://quran.com/33/21 , https://quran.com/49/11 , https://quran.com/68/4
 - [S28] Sunan Abi Dawud 495, sunnah.com: https://sunnah.com/abudawud:495 (direct fetch blocked, 403; text and grading from the sunnah.com search snippet)
 - Not drafted (insufficient primary source reached): Korea 2022 revised national curriculum. Only secondary sources and a KICE PDF on the 2015 curriculum: https://www.kice.re.kr/boardCnts/fileDown.do?fileSeq=8f54f214e1c95482943d8de4745da207
+

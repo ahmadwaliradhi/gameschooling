@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { STARTER_PLAN_CATEGORIES, STARTER_PLAN_TAGS } from "#/domain/starter-plans";
 import { familyWithChild, testDb } from "#/test/harness";
 import { savePlan } from "./family";
 import { starterPlansFor } from "./starter-plans";
 import { parentView } from "./views";
 
+const byId = (id: string) => starterPlansFor(8).find((p) => p.id === id)!;
+
 describe("Starter Plans", () => {
-  it("covers every approach the Starter Plan research names", () => {
+  it("covers every approach the spec names", () => {
     const names = starterPlansFor(8).map((p) => p.name);
     for (const approach of [
       "Singapore Math",
@@ -28,7 +31,7 @@ describe("Starter Plans", () => {
       "Australian Curriculum",
       "Finnish",
       "Japanese",
-      "India Foundational",
+      "India Foundational Stage",
       "Coding",
       "Money skills",
       "Feelings and friendship",
@@ -56,28 +59,26 @@ describe("Starter Plans", () => {
       "University application",
       "Life readiness",
     ]) {
-      expect(names.some((n) => n.includes(approach))).toBe(true);
+      expect(
+        names.some((n) => n.includes(approach)),
+        approach,
+      ).toBe(true);
     }
   });
 
-  it("labels every Starter Plan, and marks religion on exactly the faith plans", () => {
+  it("labels every Starter Plan consistently", () => {
     const plans = starterPlansFor(8);
+    expect(plans).toHaveLength(47);
     expect(new Set(plans.map((p) => p.id)).size).toBe(plans.length);
     for (const p of plans) {
-      expect(p.minAge).toBeLessThanOrEqual(p.maxAge);
-      expect(p.tags.includes("religion")).toBe(p.category === "faith");
-      expect(p.lang).toMatch(/^[a-z]{2}$/);
+      expect(p.minAge, p.id).toBeLessThanOrEqual(p.maxAge);
+      expect(STARTER_PLAN_CATEGORIES, p.id).toContain(p.category);
+      expect(["stem", "non-stem", "mixed"], p.id).toContain(p.focus);
+      for (const t of p.tags) expect(STARTER_PLAN_TAGS, p.id).toContain(t);
+      expect(p.tags.includes("religion"), p.id).toBe(p.category === "faith");
+      expect(p.lang, p.id).toMatch(/^[a-z]{2,3}$/);
     }
-    expect(plans.find((p) => p.id === "quran-arabic")?.category).toBe("faith");
-    expect(plans.find((p) => p.id === "kurikulum-merdeka")?.lang).toBe("id");
-  });
-
-  it("writes faith cover limits and method Reward choices into the text", () => {
-    const text = (id: string) => starterPlansFor(8).find((p) => p.id === id)!.text;
-    expect(text("islamic-seerah")).toMatch(/No pictures of the Prophet/);
-    expect(text("sikh")).toMatch(/No pictures of the Gurus/);
-    expect(text("hindu")).toMatch(/No pictures of deities/);
-    for (const id of ["montessori", "unschooling", "buddhist"]) expect(text(id)).not.toMatch(/^Rewards:/m);
+    expect(byId("kurikulum-merdeka").lang).toBe("id");
   });
 
   it("has at least one Starter Plan that fits every age from 3 to 18", () => {
@@ -94,9 +95,8 @@ describe("Starter Plans", () => {
 
   it("writes the Indonesian plans in Indonesian and tags them Language", () => {
     for (const id of ["utbk-snbt", "paket-c-sekolahrumah"]) {
-      const p = starterPlansFor(17).find((x) => x.id === id)!;
-      expect(p.lang).toBe("id");
-      expect(p.tags).toContain("language");
+      expect(byId(id).lang, id).toBe("id");
+      expect(byId(id).tags, id).toContain("language");
     }
   });
 
@@ -108,46 +108,55 @@ describe("Starter Plans", () => {
     expect(plans.filter((p) => p.fits).every((p) => p.minAge <= 5 && 5 <= p.maxAge)).toBe(true);
   });
 
-  describe("filters", () => {
-    it("by category keeps only that category", () => {
-      const faith = starterPlansFor(8, { category: "faith" });
-      expect(faith.length).toBeGreaterThan(0);
-      expect(faith.every((p) => p.category === "faith")).toBe(true);
-    });
+  it("with no filter, returns every Starter Plan", () => {
+    expect(starterPlansFor(5, {})).toEqual(starterPlansFor(5));
+    expect(starterPlansFor(5)).toHaveLength(47);
+  });
 
-    it("STEM matches stem and mixed plans, never non-stem; Non-STEM is the mirror", () => {
-      const stem = starterPlansFor(8, { focus: "stem" });
-      expect(stem.some((p) => p.focus === "stem")).toBe(true);
-      expect(stem.some((p) => p.focus === "mixed")).toBe(true);
-      expect(stem.some((p) => p.focus === "non-stem")).toBe(false);
+  it("filters by category", () => {
+    const faith = starterPlansFor(8, { category: "faith" });
+    expect(faith).toHaveLength(10);
+    expect(faith.every((p) => p.category === "faith")).toBe(true);
+  });
 
-      const nonStem = starterPlansFor(8, { focus: "non-stem" });
-      expect(nonStem.some((p) => p.focus === "non-stem")).toBe(true);
-      expect(nonStem.some((p) => p.focus === "mixed")).toBe(true);
-      expect(nonStem.some((p) => p.focus === "stem")).toBe(false);
-    });
+  it("STEM shows STEM and broad Starter Plans, Non-STEM shows the mirror", () => {
+    const stem = starterPlansFor(8, { focus: "stem" });
+    expect(stem.some((p) => p.focus === "stem")).toBe(true);
+    expect(stem.some((p) => p.focus === "mixed")).toBe(true);
+    expect(stem.some((p) => p.focus === "non-stem")).toBe(false);
 
-    it("by two tags keeps only plans that carry both", () => {
-      const both = starterPlansFor(8, { tags: ["outdoors", "arts"] });
-      expect(both.map((p) => p.id)).toContain("charlotte-mason");
-      expect(both.every((p) => p.tags.includes("outdoors") && p.tags.includes("arts"))).toBe(true);
-    });
+    const nonStem = starterPlansFor(8, { focus: "non-stem" });
+    expect(nonStem.some((p) => p.focus === "non-stem")).toBe(true);
+    expect(nonStem.some((p) => p.focus === "mixed")).toBe(true);
+    expect(nonStem.some((p) => p.focus === "stem")).toBe(false);
+  });
 
-    it("fitsOnly hides plans outside the Child's age", () => {
-      const fitting = starterPlansFor(3, { fitsOnly: true });
-      expect(fitting.length).toBeLessThan(starterPlansFor(3).length);
-      expect(fitting.every((p) => p.fits)).toBe(true);
-    });
+  it("keeps only Starter Plans that carry every chosen tag", () => {
+    const plans = starterPlansFor(4, { tags: ["early-years", "outdoors"] });
+    expect(plans.map((p) => p.id).sort()).toEqual(["charlotte-mason", "forest-school"]);
+  });
 
-    it("with no filter is the same as the plain list, fitting first", () => {
-      expect(starterPlansFor(5, {})).toEqual(starterPlansFor(5));
-    });
+  it("hides Starter Plans outside the Child's age when asked", () => {
+    const plans = starterPlansFor(3, { fitsOnly: true });
+    expect(plans.length).toBeGreaterThan(0);
+    expect(plans.every((p) => p.minAge <= 3 && 3 <= p.maxAge)).toBe(true);
+    expect(plans.length).toBeLessThan(starterPlansFor(3).length);
+  });
 
-    it("keeps fitting plans first when combined with a filter", () => {
-      const plans = starterPlansFor(5, { category: "method" });
-      const firstMiss = plans.findIndex((p) => !p.fits);
-      if (firstMiss >= 0) expect(plans.slice(firstMiss).every((p) => !p.fits)).toBe(true);
-    });
+  it("still puts fitting Starter Plans first when filtered", () => {
+    const plans = starterPlansFor(13, { category: "faith" });
+    const firstMiss = plans.findIndex((p) => !p.fits);
+    expect(firstMiss).toBeGreaterThan(0);
+    expect(plans.slice(firstMiss).every((p) => !p.fits)).toBe(true);
+  });
+
+  it("states the limits faith and method Starter Plans need in their text", () => {
+    expect(byId("islamic-seerah").text).toMatch(/No pictures of the Prophet/);
+    expect(byId("sikh").text).toMatch(/No pictures of the Gurus/);
+    expect(byId("hindu").text).toMatch(/No pictures of deities/);
+    for (const id of ["montessori", "unschooling", "buddhist"]) {
+      expect(byId(id).text, id).not.toMatch(/^Rewards:/m);
+    }
   });
 
   it("copies the text into the Child's Plan, and editing the copy leaves the Starter Plan alone", async () => {
