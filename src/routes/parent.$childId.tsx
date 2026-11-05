@@ -7,6 +7,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  STARTER_PLAN_CATEGORIES,
+  type StarterPlanCategory,
+  type StarterPlanTag,
+} from "#/content/starter-plans";
+import { filterStarterPlans } from "#/services/starter-plans";
 import { AnswerCrop } from "#/components/answer-crop";
 import { ChildForm } from "#/components/child-form";
 import { LocalDate } from "#/components/local-date";
@@ -598,51 +606,157 @@ function WorksheetAnswers(props: { answers: Answer[]; photoKey: string }) {
   );
 }
 
+const CATEGORY_LABELS: Record<StarterPlanCategory, string> = {
+  method: "Methods",
+  curriculum: "Curricula",
+  subject: "Subjects & skills",
+  faith: "Faith",
+};
+const TAG_LABELS: Record<StarterPlanTag, string> = {
+  religion: "Religion",
+  "early-years": "Early years",
+  language: "Language",
+  outdoors: "Outdoors",
+  arts: "Arts",
+  "life-skills": "Life skills",
+  "whole-week": "Whole week",
+};
+// Chip values: the two focus chips (mutually exclusive) and every tag.
+type Chip = "stem" | "non-stem" | StarterPlanTag;
+const CHIP_LABELS: Record<Chip, string> = { stem: "STEM", "non-stem": "Non-STEM", ...TAG_LABELS };
+
 // Copies a Starter Plan into the Plan box, as if the Parent typed it. Nothing is saved
-// until Make quests.
+// until Make quests. Tabs, chips and the age switch only narrow the list; they reset on open.
 function StarterPlans(props: { view: View; text: string; onUse: (text: string) => void }) {
   const [open, setOpen] = useState(false);
+  const [category, setCategory] = useState<"all" | StarterPlanCategory>("all");
+  const [chips, setChips] = useState<Chip[]>([]);
+  const [fitsOnly, setFitsOnly] = useState(true);
+  const all = props.view.starterPlans;
+
+  const focus = chips.find((c): c is "stem" | "non-stem" => c === "stem" || c === "non-stem");
+  const tags = chips.filter((c): c is StarterPlanTag => c !== "stem" && c !== "non-stem");
+  const shown = filterStarterPlans(all, {
+    category: category === "all" ? undefined : category,
+    focus,
+    tags,
+    fitsOnly,
+  });
+  const countIn = (c: "all" | StarterPlanCategory) =>
+    filterStarterPlans(all, { category: c === "all" ? undefined : c, focus, tags, fitsOnly }).length;
+
+  const reset = () => {
+    setCategory("all");
+    setChips([]);
+    setFitsOnly(true);
+  };
+  const onOpenChange = (next: boolean) => {
+    if (next) reset();
+    setOpen(next);
+  };
+  // STEM and Non-STEM cannot both be on: picking one drops the other.
+  const onChips = (next: string[]) => {
+    const picked = next as Chip[];
+    const added = picked.find((c) => !chips.includes(c));
+    setChips(
+      added === "stem"
+        ? picked.filter((c) => c !== "non-stem")
+        : added === "non-stem"
+          ? picked.filter((c) => c !== "stem")
+          : picked,
+    );
+  };
+
   return (
     <>
-      <Button type="button" variant="outline" onClick={() => setOpen(true)}>
+      <Button type="button" variant="outline" onClick={() => onOpenChange(true)}>
         Use a Starter Plan
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[80dvh] overflow-y-auto sm:max-w-lg">
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="flex max-h-[85dvh] flex-col gap-3 sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Starter Plans</DialogTitle>
           </DialogHeader>
-          <ul className="flex flex-col divide-y">
-            {props.view.starterPlans.map((p) => (
-              <li key={p.id} className="flex flex-col gap-2 py-3">
-                <div className="flex items-baseline gap-2">
-                  <span className="flex-1 font-medium">{p.name}</span>
-                  <span className={cn("text-xs", p.fits ? "text-foreground" : "text-muted-foreground")}>
-                    ages {p.minAge}–{p.maxAge}
-                  </span>
-                </div>
-                <p className="line-clamp-3 text-sm whitespace-pre-line text-muted-foreground">{p.text}</p>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="self-start"
-                  onClick={() => {
-                    if (
-                      props.text.trim() &&
-                      props.text !== p.text &&
-                      !confirm("Replace the text in the Plan box with this Starter Plan?")
-                    )
-                      return;
-                    props.onUse(p.text);
-                    setOpen(false);
-                  }}
-                >
-                  Use
-                </Button>
-              </li>
+          <Tabs value={category} onValueChange={(v) => setCategory(v as "all" | StarterPlanCategory)}>
+            {/* One row that scrolls sideways on a phone, so the pill never breaks. */}
+            <TabsList className="w-full justify-start overflow-x-auto">
+              {(["all", ...STARTER_PLAN_CATEGORIES] as const).map((c) => (
+                <TabsTrigger key={c} value={c} className="shrink-0 text-xs">
+                  {c === "all" ? "All" : CATEGORY_LABELS[c]}
+                  <span className="text-muted-foreground tabular-nums">{countIn(c)}</span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          <ToggleGroup
+            type="multiple"
+            value={chips}
+            onValueChange={onChips}
+            size="sm"
+            variant="outline"
+            spacing={1}
+            className="flex-wrap justify-start"
+            aria-label="Narrow the Starter Plans"
+          >
+            {(Object.keys(CHIP_LABELS) as Chip[]).map((c) => (
+              <ToggleGroupItem key={c} value={c} className="h-7 rounded-full px-2.5 text-xs">
+                {CHIP_LABELS[c]}
+              </ToggleGroupItem>
             ))}
-          </ul>
+          </ToggleGroup>
+          <div className="flex items-center gap-2 text-sm">
+            <Switch id="fits-only" checked={fitsOnly} onCheckedChange={setFitsOnly} />
+            <Label htmlFor="fits-only">Fits {props.view.child.nickname}'s age</Label>
+            <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+              {shown.length} of {all.length}
+            </span>
+          </div>
+          {shown.length === 0 ? (
+            <div className="flex flex-col items-start gap-2 py-6 text-sm text-muted-foreground">
+              <p>No Starter Plans match.</p>
+              <Button type="button" size="sm" variant="outline" onClick={reset}>
+                Clear filters
+              </Button>
+            </div>
+          ) : (
+            <ul className="-mx-1 flex min-h-0 flex-col divide-y overflow-y-auto px-1">
+              {shown.map((p) => (
+                <li key={p.id} className="flex flex-col gap-2 py-3">
+                  <div className="flex items-baseline gap-2">
+                    <span className="flex-1 font-medium">{p.name}</span>
+                    <span className={cn("text-xs", p.fits ? "text-foreground" : "text-muted-foreground")}>
+                      ages {p.minAge}–{p.maxAge}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {[CATEGORY_LABELS[p.category], CHIP_LABELS[p.focus === "mixed" ? "stem" : p.focus]]
+                      .concat(p.focus === "mixed" ? ["Non-STEM"] : [])
+                      .concat(p.tags.map((t) => TAG_LABELS[t]))
+                      .join(" · ")}
+                  </p>
+                  <p className="line-clamp-3 text-sm whitespace-pre-line text-muted-foreground">{p.text}</p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="self-start"
+                    onClick={() => {
+                      if (
+                        props.text.trim() &&
+                        props.text !== p.text &&
+                        !confirm("Replace the text in the Plan box with this Starter Plan?")
+                      )
+                        return;
+                      props.onUse(p.text);
+                      setOpen(false);
+                    }}
+                  >
+                    Use
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
         </DialogContent>
       </Dialog>
     </>
