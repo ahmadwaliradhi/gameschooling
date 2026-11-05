@@ -47,6 +47,17 @@ describe("Starter Plans", () => {
       "Seerah",
       "Akhlaq",
       "Wudu and salah",
+      "SAT",
+      "ACT",
+      "AP",
+      "Cambridge International A Level",
+      "IB Diploma",
+      "UTBK-SNBT",
+      "Paket C",
+      "NIOS",
+      "SPM",
+      "University application",
+      "Life readiness",
     ]) {
       expect(
         names.some((n) => n.includes(approach)),
@@ -57,7 +68,7 @@ describe("Starter Plans", () => {
 
   it("labels every Starter Plan consistently", () => {
     const plans = starterPlansFor(8);
-    expect(plans).toHaveLength(36);
+    expect(plans).toHaveLength(47);
     expect(new Set(plans.map((p) => p.id)).size).toBe(plans.length);
     for (const p of plans) {
       expect(p.minAge, p.id).toBeLessThanOrEqual(p.maxAge);
@@ -70,6 +81,25 @@ describe("Starter Plans", () => {
     expect(byId("kurikulum-merdeka").lang).toBe("id");
   });
 
+  it("has at least one Starter Plan that fits every age from 3 to 18", () => {
+    for (let age = 3; age <= 18; age++) {
+      expect(starterPlansFor(age, { fitsOnly: true }).length, `age ${age}`).toBeGreaterThan(0);
+    }
+  });
+
+  it("the University chip finds the test, route and application plans, not Life readiness", () => {
+    const ids = starterPlansFor(17, { tags: ["university"] }).map((p) => p.id);
+    expect(ids).toEqual(expect.arrayContaining(["sat-prep", "utbk-snbt", "university-application"]));
+    expect(ids).not.toContain("life-readiness");
+  });
+
+  it("writes the Indonesian plans in Indonesian and tags them Language", () => {
+    for (const id of ["utbk-snbt", "paket-c-sekolahrumah"]) {
+      expect(byId(id).lang, id).toBe("id");
+      expect(byId(id).tags, id).toContain("language");
+    }
+  });
+
   it("puts the ones that fit the Child's age first", () => {
     const plans = starterPlansFor(5);
     const firstMiss = plans.findIndex((p) => !p.fits);
@@ -80,7 +110,7 @@ describe("Starter Plans", () => {
 
   it("with no filter, returns every Starter Plan", () => {
     expect(starterPlansFor(5, {})).toEqual(starterPlansFor(5));
-    expect(starterPlansFor(5)).toHaveLength(36);
+    expect(starterPlansFor(5)).toHaveLength(47);
   });
 
   it("filters by category", () => {

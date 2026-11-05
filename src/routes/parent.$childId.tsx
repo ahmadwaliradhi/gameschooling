@@ -627,6 +627,7 @@ const TAG_LABELS: Record<StarterPlanTag, string> = {
   arts: "Arts",
   "life-skills": "Life skills",
   "whole-week": "Whole week",
+  university: "University",
 };
 const FOCUS_LABELS: Record<StarterPlanFocusChip, string> = { stem: "STEM", "non-stem": "Non-STEM" };
 type CategoryTab = StarterPlanCategory | "all";

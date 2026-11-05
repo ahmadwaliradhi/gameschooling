@@ -127,7 +127,7 @@ Hadiah: es krim = 100, ke taman = 40, stiker = 15`,
     focus: "mixed",
     tags: ["early-years", "life-skills", "whole-week"],
     lang: "en",
-    text: `Montessori style: real tasks, the child chooses, hands before words.
+    text: `Montessori style: real work, the child chooses, hands before words.
 Practical life: pour water between two jugs, then wipe up any spill without help.
 Senses: sort ten things at home from lightest to heaviest, then smallest to biggest.
 Maths: build numbers 1 to 10 with beads or pasta, then match each to its written number.
@@ -246,7 +246,7 @@ Rewards: hardware store trip = 60, glue gun time = 40`,
     id: "mastery-maths",
     name: "Mastery maths (step by step)",
     minAge: 5,
-    maxAge: 14,
+    maxAge: 15,
     category: "subject",
     focus: "stem",
     tags: [],
@@ -632,5 +632,215 @@ Language: English and Arabic.
 Follow the family's Sunni madhhab. A Parent checks each step.
 No music in Quests. All food is halal.
 Rewards: masjid trip = 60, dates and milk treat = 20`,
+  },
+  {
+    id: "sat-prep",
+    name: "SAT prep (College Board and Khan Academy)",
+    minAge: 15,
+    maxAge: 18,
+    category: "subject",
+    focus: "mixed",
+    tags: ["university"],
+    lang: "en",
+    text: `Getting ready for the digital SAT, a little every week, using only the official free practice.
+Diagnose: take one full practice test in the Bluebook app and photograph the score summary.
+Reading and Writing: do one timed module on Khan Academy's Official SAT Prep, then write two lines on the question type you missed most.
+Math: redo every missed question from the last module without a calculator first, then check with one.
+Words: collect ten unfamiliar words from this week's passages and use each in a sentence.
+Calendar: find the next test date and its registration deadline on the College Board site and tell a Parent both.
+Language: English.
+Homeschoolers register themselves at My SAT and enter the homeschool code 970000; no school is needed.
+Practice comes from College Board and Khan Academy only. No question banks copied into Quests. A Parent reads the score report with the Child, not instead of them.
+Rewards: choose the weekend outing = 60, new book or album = 80, friends over for pizza = 150`,
+  },
+  {
+    id: "act-prep",
+    name: "ACT prep (official practice)",
+    minAge: 15,
+    maxAge: 18,
+    category: "subject",
+    focus: "mixed",
+    tags: ["university"],
+    lang: "en",
+    text: `Getting ready for the ACT with ACT's own free practice tests, one section at a time.
+Diagnose: take Official Practice Test 1 (English, Math, Reading) under time and photograph the score sheet.
+English: do one timed English section, then list the three grammar rules you broke most.
+Math: redo every missed Math question from the last section, showing each step on paper.
+Reading: do one timed Reading passage and say aloud, in one minute, what the passage argued.
+Decide: with a Parent, decide whether to add the optional Science or Writing section for your target colleges.
+Language: English.
+Practice comes from act.org only. Register with your own MyACT account.
+Rewards: choose the weekend outing = 60, new book or album = 80, friends over for pizza = 150`,
+  },
+  {
+    id: "ap-self-study",
+    name: "AP self-study (one subject)",
+    minAge: 15,
+    maxAge: 18,
+    category: "subject",
+    focus: "mixed",
+    tags: ["university"],
+    lang: "en",
+    text: `One AP subject, studied at home, with the exam sat at a host school in May.
+Subject this year: (write it here, e.g. AP Calculus AB, AP World History).
+Host school: find a nearby school on the AP Course Ledger, call its AP coordinator, and tell a Parent the exam-order deadline (it falls in mid-November).
+Learn: watch one AP Daily video for this week's topic and write a half-page summary in your own words.
+Practise: do one set of practice questions for the topic and mark them yourself; redo any you got wrong.
+Review: once a week, explain last week's topic to a Parent in five minutes without notes.
+Language: English.
+The exam is ordered through a school, never by a Parent. Keep the deadline on the fridge.
+Rewards: choose the weekend outing = 60, new book or album = 80, day trip = 150`,
+  },
+  {
+    id: "cambridge-a-level",
+    name: "Cambridge International A Level (private candidate)",
+    minAge: 15,
+    maxAge: 18,
+    category: "curriculum",
+    focus: "mixed",
+    tags: ["university", "whole-week"],
+    lang: "en",
+    text: `Working towards Cambridge International AS and A Levels as a private candidate, two or three subjects at a time.
+Subjects: (write them here, e.g. Mathematics, Physics, English Literature). IGCSE first if the Child is under 16.
+Centre: find a Cambridge school or exam provider that takes private candidates and note the entry window for the June or November series.
+Syllabus: read this week's section of the syllabus for one subject and list the learning objectives in your own words.
+Past paper: do one question from a past paper under time, then mark it with the mark scheme and the examiner report.
+Notes: turn this week's topic into one page of notes or a mind map.
+Language: English.
+Practice comes from the Cambridge syllabus pages. Some syllabuses are not open to private candidates; check before choosing.
+Rewards: choose the weekend outing = 60, new book or album = 80, day trip = 150`,
+  },
+  {
+    id: "ib-diploma-inspired",
+    name: "IB Diploma inspired",
+    minAge: 16,
+    maxAge: 18,
+    category: "curriculum",
+    focus: "mixed",
+    tags: ["university", "whole-week"],
+    lang: "en",
+    text: `A week in the spirit of the IB Diploma: six subject areas plus thinking, service and a long essay.
+Six areas: do one hour each in a language, a second language, a humanity, a science, maths and an art.
+Theory of knowledge: pick one claim you heard this week and write a paragraph on how you would know if it is true.
+Creativity, activity, service: log one creative thing, one physical thing and one act of service.
+Extended essay: write 300 words of a long essay on a question you chose, and keep a source list.
+Language: English and the second language.
+The IB Diploma itself is only sat through an authorised IB school. This plan borrows its shape; it does not lead to the diploma.
+Rewards: choose the weekend outing = 60, new book or album = 80, day trip = 150`,
+  },
+  {
+    id: "utbk-snbt",
+    name: "Persiapan UTBK-SNBT",
+    minAge: 15,
+    maxAge: 18,
+    category: "subject",
+    focus: "mixed",
+    tags: ["university", "language"],
+    lang: "id",
+    text: `Persiapan UTBK-SNBT sedikit demi sedikit setiap minggu, mengikuti Kerangka Acuan UTBK dari SNPMB.
+Penalaran Umum: kerjakan 30 soal penalaran dengan waktu 30 menit, lalu tulis jenis soal yang paling sering salah.
+Literasi Bahasa Indonesia: baca satu artikel panjang dan tulis gagasan utama tiap paragraf dalam satu kalimat.
+Literasi Bahasa Inggris: baca satu teks berbahasa Inggris dan ceritakan isinya dalam bahasa Indonesia selama satu menit.
+Penalaran Matematika: kerjakan 20 soal cerita dengan waktu 40 menit, lalu kerjakan ulang yang salah tanpa melihat kunci.
+Jadwal: cek jadwal SNPMB tahun ini di snpmb.id, catat tanggal registrasi akun, pendaftaran, dan pelaksanaan UTBK, lalu laporkan ke orang tua.
+Bahasa: Indonesia dan Inggris.
+Lulusan Paket C ikut jalur SNBT (bukan SNBP) dengan batas umur 25 tahun. Soal latihan tidak disalin ke dalam Quest.
+Hadiah: pilih acara akhir pekan = 60, buku atau album baru = 80, makan bersama teman = 150`,
+  },
+  {
+    id: "paket-c-sekolahrumah",
+    name: "Paket C untuk sekolahrumah",
+    minAge: 15,
+    maxAge: 18,
+    category: "curriculum",
+    focus: "mixed",
+    tags: ["university", "language", "whole-week"],
+    lang: "id",
+    text: `Menuju ijazah Paket C (setara SMA) dari sekolahrumah, lalu TKA dan UTBK.
+Administrasi: pastikan sekolahrumah terdaftar di dinas pendidikan kabupaten/kota dan anak terdaftar di PKBM atau SKB dengan NISN aktif; tunjukkan buktinya.
+Bahasa Indonesia: tulis satu esai 300 kata tentang topik pilihan sendiri, lalu perbaiki ejaan dan tanda baca.
+Matematika: kerjakan 15 soal dari materi minggu ini di buku Paket C, lalu kerjakan ulang yang salah.
+Bahasa Inggris: baca satu teks pendek dan jawab lima pertanyaan pemahaman dalam bahasa Inggris.
+Mapel pilihan: pelajari satu bab dari dua mata pelajaran pilihan TKA dan buat ringkasan satu halaman per bab.
+Bahasa: Indonesia dan Inggris.
+Kurikulum mengacu ke kurikulum nasional atau kurikulum kesetaraan. Pendaftaran TKA lewat operator PKBM/SKB, bukan mandiri. Jadwal dicek di laman Pusmendik dan snpmb.id.
+Hadiah: pilih acara akhir pekan = 60, buku baru = 80, jalan-jalan sehari = 150`,
+  },
+  {
+    id: "india-nios-cuet",
+    name: "India: NIOS Class 12 and CUET",
+    minAge: 15,
+    maxAge: 18,
+    category: "curriculum",
+    focus: "mixed",
+    tags: ["university", "whole-week"],
+    lang: "en",
+    text: `Finishing Class 12 through NIOS (open schooling) and preparing for CUET-UG, the central universities' entrance test.
+Admission: check the NIOS admission block that is open now and the age cut-off, and tell a Parent the last date.
+Five subjects: (write the NIOS subjects here). Do one chapter from one subject each day and keep a page of notes per chapter.
+Practice: take one mock paper on the NTA Test Practice Centre for one CUET subject and photograph the result.
+Language paper: read one editorial and write its argument in five sentences.
+Aptitude: do 20 reasoning and numeracy questions under time and redo the misses.
+Language: English and the home language.
+Swap CUET for JEE Main (engineering) or NEET-UG (medicine) if that is the goal; both also accept NIOS with five subjects.
+Rewards: choose the weekend outing = 60, new book = 80, day trip = 150`,
+  },
+  {
+    id: "malaysia-spm-muet",
+    name: "Malaysia: SPM private candidate and MUET",
+    minAge: 15,
+    maxAge: 18,
+    category: "curriculum",
+    focus: "mixed",
+    tags: ["university", "whole-week"],
+    lang: "en",
+    text: `Working towards SPM as a private candidate, with MUET for English, towards STPM or university.
+Core subjects: Bahasa Melayu, English, Sejarah, Mathematics, Science, and Pendidikan Islam or Moral.
+Bahasa Melayu: write one karangan of 250 words and mark it with a Parent.
+Sejarah: summarise one chapter into ten dated facts and say them from memory.
+Mathematics: do 15 questions from this week's topic and redo the misses.
+MUET: do one official MUET sample reading task and one 2-minute spoken answer; record the speaking.
+Calendar: find the private-candidate registration window for SPM and the next MUET session and tell a Parent both.
+Language: Bahasa Melayu and English.
+Practice comes from the Lembaga Peperiksaan and MPM sites. Bahasa Melayu and Sejarah passes are required for public universities.
+Rewards: choose the weekend outing = 60, new book = 80, day trip = 150`,
+  },
+  {
+    id: "university-application",
+    name: "University application skills",
+    minAge: 16,
+    maxAge: 18,
+    category: "subject",
+    focus: "non-stem",
+    tags: ["university", "life-skills"],
+    lang: "en",
+    text: `The application itself: statement, reference, portfolio or interview, and money.
+Shortlist: pick three courses at three universities and write one line each on why.
+Statement: answer in your own words why you want this subject, how your studies prepared you, and what you did outside study; keep each answer to a paragraph.
+Reference: list two adults who could write a reference (a tutor, a coach, an employer; not family) and ask one.
+Interview: answer three subject questions aloud for a Parent, thinking out loud as you go; record it.
+Money: find one scholarship or student-finance scheme you qualify for and write down its deadline and what it asks for.
+Language: English.
+UCAS asks three set questions; Common App asks one essay from a set of prompts. Homeschoolers apply independently (UCAS) or with a Parent as counselor (Common App).
+Rewards: choose the weekend outing = 60, new book = 80, meal out with friends = 150`,
+  },
+  {
+    id: "life-readiness",
+    name: "Life readiness (16 to 18)",
+    minAge: 16,
+    maxAge: 18,
+    category: "subject",
+    focus: "non-stem",
+    tags: ["life-skills"],
+    lang: "en",
+    text: `Skills for living on your own: studying, money, documents, work and health.
+Study: plan the week on a calendar with spaced study sessions, and test yourself from memory before re-reading.
+Budget: track every rupiah or dollar spent for seven days, then write a budget for next month.
+Documents: list the ID, licence or bank account you can get at your age, find the official page, and start one application with a Parent.
+Work: write a one-page CV and find one part-time job you are legally old enough for.
+Health: sleep 8 to 10 hours for five nights and cook two meals for the family.
+Language: English.
+Official sources only for rules on ID, driving and work. A Parent signs anything that needs it.
+Rewards: choose the weekend outing = 60, new book = 80, meal out with friends = 150`,
   },
 ];

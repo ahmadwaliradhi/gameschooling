@@ -17,6 +17,7 @@ export const STARTER_PLAN_TAGS = [
   "arts",
   "life-skills",
   "whole-week",
+  "university", // prepares for university entrance: a test, a qualifying route, or the application itself
 ] as const;
 export type StarterPlanTag = (typeof STARTER_PLAN_TAGS)[number];
 
