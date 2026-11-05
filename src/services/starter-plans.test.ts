@@ -44,6 +44,17 @@ describe("Starter Plans", () => {
       "Seerah",
       "Akhlaq",
       "Wudu and salah",
+      "SAT",
+      "ACT",
+      "AP",
+      "Cambridge International A Level",
+      "IB Diploma",
+      "UTBK-SNBT",
+      "Paket C",
+      "NIOS",
+      "SPM",
+      "University application",
+      "Life readiness",
     ]) {
       expect(names.some((n) => n.includes(approach))).toBe(true);
     }
@@ -67,6 +78,26 @@ describe("Starter Plans", () => {
     expect(text("sikh")).toMatch(/No pictures of the Gurus/);
     expect(text("hindu")).toMatch(/No pictures of deities/);
     for (const id of ["montessori", "unschooling", "buddhist"]) expect(text(id)).not.toMatch(/^Rewards:/m);
+  });
+
+  it("has at least one Starter Plan that fits every age from 3 to 18", () => {
+    for (let age = 3; age <= 18; age++) {
+      expect(starterPlansFor(age, { fitsOnly: true }).length, `age ${age}`).toBeGreaterThan(0);
+    }
+  });
+
+  it("the University chip finds the test, route and application plans, not Life readiness", () => {
+    const ids = starterPlansFor(17, { tags: ["university"] }).map((p) => p.id);
+    expect(ids).toEqual(expect.arrayContaining(["sat-prep", "utbk-snbt", "university-application"]));
+    expect(ids).not.toContain("life-readiness");
+  });
+
+  it("writes the Indonesian plans in Indonesian and tags them Language", () => {
+    for (const id of ["utbk-snbt", "paket-c-sekolahrumah"]) {
+      const p = starterPlansFor(17).find((x) => x.id === id)!;
+      expect(p.lang).toBe("id");
+      expect(p.tags).toContain("language");
+    }
   });
 
   it("puts the ones that fit the Child's age first", () => {
